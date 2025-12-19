@@ -37,25 +37,47 @@ export interface MinimalChunkContext {
 }
 
 /**
- * Extrai seção específica da premissa (aceita SEÇÃO, BLOCO ou PARTE)
+ * Extrai seção específica da premissa (aceita SEÇÃO, BLOCO, PARTE, SECTION, BLOCK, PART)
+ * usando cabeçalhos ancorados por linha.
  */
 function extractPremiseSection(premise: string, sectionNumber: number): string {
-  // ✅ CORREÇÃO: Regex flexível que aceita [SEÇÃO N], [BLOCO N], [PARTE N] ou apenas SEÇÃO N
-  // Aceita com ou sem colchetes, case insensitive
-  const sectionRegex = new RegExp(
-    `(?:[\[\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b(?:[\]\)]?|[:\\-–])\\s*(?:[\\-–:]\\s*)?([^\\n]*)([\\s\\S]*?)(?=(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*\\d+|$)` ,
-    'i'
-  );
+  // Cabeçalho esperado, exemplos válidos (case-insensitive):
+  // [SEÇÃO 1 - INÍCIO]
+  // SEÇÃO 2
+  // BLOCO 3 - CLÍMAX
+  // [SECTION 1 - BEGINNING]
+  const headerPattern = `^\n?\s*(?:\\[\n\r\t ]*)?(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b[^\\n]*$`;
+  const headerRegex = new RegExp(headerPattern, 'im');
 
-  const match = premise.match(sectionRegex);
-  if (match) {
-    const title = (match[1] || '').trim();
-    const content = (match[2] || '').trim();
-    // Retorna o conteúdo limpo, removendo o cabeçalho para não confundir a IA
-    return content || title;
+  // Qualquer cabeçalho de seção
+  const allHeadersRegex = /^\s*(?:\[\s*)?(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\s*\d+\b[^\n]*$/gim;
+
+  const headerMatch = premise.match(headerRegex);
+
+  if (headerMatch) {
+    const headerText = headerMatch[0];
+    const headerIndex = premise.indexOf(headerText);
+    const afterHeaderIndex = headerIndex + headerText.length;
+
+    // Encontrar o próximo cabeçalho após o atual
+    let nextHeaderIndex = premise.length;
+    let match: RegExpExecArray | null;
+
+    while ((match = allHeadersRegex.exec(premise)) !== null) {
+      const idx = match.index;
+      if (idx > afterHeaderIndex) {
+        nextHeaderIndex = idx;
+        break;
+      }
+    }
+
+    const sectionRaw = premise.slice(afterHeaderIndex, nextHeaderIndex).trim();
+    if (sectionRaw) {
+      return sectionRaw;
+    }
   }
 
-  // Fallback melhorado: se não achar, tenta dividir por parágrafos (linhas duplas)
+  // Fallback: divisão por parágrafos (linhas duplas)
   const paragraphs = premise
     .split(/\n\n+/)
     .map((p) => p.trim())
@@ -71,7 +93,7 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
     }
   }
 
-  // Último recurso: divisão por linhas (original, mas só se tudo falhar)
+  // Último recurso: divisão por linhas
   const lines = premise
     .split('\n')
     .map((l) => l.trim())
