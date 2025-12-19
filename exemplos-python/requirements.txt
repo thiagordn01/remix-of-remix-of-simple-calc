@@ -1,0 +1,10 @@
+# Dependências para Integração de Autenticação
+# Executáveis Python - Kiwify/Supabase
+
+# Biblioteca para fazer requisições HTTP
+requests==2.31.0
+
+# PyInstaller para gerar executáveis (opcional)
+pyinstaller==6.3.0
+
+# Nota: tkinter já vem instalado no Python Windows por padrão
