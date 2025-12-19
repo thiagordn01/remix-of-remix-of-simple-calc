@@ -28,7 +28,6 @@ export const AgentModal: React.FC<AgentModalProps> = ({
     language: 'pt-BR',
     location: 'Brasil',
     duration: 10,
-    premiseWordTarget: 700,
     premisePrompt: '',
     scriptPrompt: ''
   });
@@ -60,7 +59,6 @@ export const AgentModal: React.FC<AgentModalProps> = ({
         language: agent.language,
         location: agent.location,
         duration: agent.duration,
-        premiseWordTarget: agent.premiseWordTarget,
         premisePrompt: agent.premisePrompt,
         scriptPrompt: agent.scriptPrompt
       });
@@ -72,7 +70,6 @@ export const AgentModal: React.FC<AgentModalProps> = ({
         language: 'pt-BR',
         location: 'Brasil',
         duration: 10,
-        premiseWordTarget: 700,
         premisePrompt: '',
         scriptPrompt: ''
       });
@@ -477,20 +474,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
               />
             </div>
 
-            <div>
-              <label className="block text-golden-400 font-semibold text-sm mb-2">
-                Palavras Premissa
-              </label>
-              <input
-                type="number"
-                value={formData.premiseWordTarget}
-                onChange={(e) => handleInputChange('premiseWordTarget', parseInt(e.target.value))}
-                className="w-full px-4 py-2.5 bg-gradient-to-br from-gray-800/90 to-gray-900/95 border-2 border-golden-500/60 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-golden-300 focus:ring-2 focus:ring-golden-400/70 shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)] backdrop-blur-sm transition-all duration-300 hover:border-golden-400/80"
-                placeholder="700"
-                min="100"
-                max="2000"
-              />
-            </div>
+            <div />
           </div>
 
           <div>

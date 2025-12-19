@@ -339,7 +339,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           location: agent.location || 'Brasil'
         });
 
-        const premiseWordTarget = agent.premiseWordTarget || 500;
+        const premiseWordTarget = 700;
         addLog(jobId, `📊 Meta de palavras para premissa: ${premiseWordTarget}`);
 
         // Gerar premissa usando o provider correto
@@ -406,7 +406,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
       // Calcular palavras alvo para o roteiro baseado na duração
       const duration = agent.duration || 10; // minutos
-      const wordsPerMinute = 150;
+      const wordsPerMinute = 170;
       const targetWords = duration * wordsPerMinute;
       
       addLog(jobId, `📊 Meta de palavras para roteiro: ${targetWords} (${duration} min de duração)`);

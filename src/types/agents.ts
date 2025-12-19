@@ -8,7 +8,6 @@ export interface Agent {
   location: string;
   channelName?: string;
   duration: number; // em minutos
-  premiseWordTarget: number;
   autoGenerateAudio?: boolean;
   voiceId?: string;
   createdAt: Date;
@@ -24,7 +23,6 @@ export interface CreateAgentRequest {
   location: string;
   channelName?: string;
   duration: number;
-  premiseWordTarget: number;
   autoGenerateAudio?: boolean;
   voiceId?: string;
 }
