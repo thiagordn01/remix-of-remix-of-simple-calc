@@ -5,11 +5,11 @@ export interface PromptTemplate {
   script: string;
 }
 
-// --- GERADORES DE PROMPT DINÂMICOS (TEMPLATE "INVISÍVEL") ---
+// --- FUNÇÕES GERADORAS DINÂMICAS ---
 
 const getNeutralPremise = (targetLanguage: string, culturalContext: string) => `
-ATENÇÃO: Você é um motor de execução de roteiros.
-Sua função é processar o PROMPT DO USUÁRIO e estruturá-lo para o sistema.
+ATENÇÃO: Você é um motor de estruturação de roteiros.
+Sua única função é organizar o PROMPT DO USUÁRIO em blocos lógicos para processamento.
 
 ---
 PROMPT DO USUÁRIO (Conteúdo Real):
@@ -18,58 +18,58 @@ PROMPT DO USUÁRIO (Conteúdo Real):
 """
 ---
 
-CONFIGURAÇÕES DE SAÍDA:
-- IDIOMA OBRIGATÓRIO: ${targetLanguage}
-- CONTEXTO CULTURAL: ${culturalContext || "Padrão Internacional"}
-- PÚBLICO ALVO: [localizacao]
+CONFIGURAÇÕES:
+- IDIOMA DE SAÍDA: ${targetLanguage} (Obrigatório)
+- CONTEXTO: ${culturalContext || "Padrão"}
+- PÚBLICO: [localizacao]
 
-⚠️ INSTRUÇÃO TÉCNICA (SISTEMA):
-Para o software funcionar, divida a resposta em blocos lógicos usando a tag [SEÇÃO X].
-NÃO altere o conteúdo do usuário. Apenas fatie o texto para caber nos blocos.
+⚠️ INSTRUÇÃO TÉCNICA DE ENGENHARIA (CRÍTICO):
+Para o funcionamento do software, você DEVE dividir a resposta em blocos numerados usando a tag [SEÇÃO X].
+NÃO altere a ideia do usuário. Apenas divida o texto para caber nos blocos.
 
-FORMATO DE SAÍDA (Use este esqueleto):
+FORMATO DE SAÍDA OBRIGATÓRIO (O Software só lê este formato):
 
 [SEÇÃO 1]
-(Primeira parte do conteúdo solicitado...)
+(Primeira parte do conteúdo solicitado. Se for uma lista, itens 1-3. Se for história, início.)
 
 [SEÇÃO 2]
-(Continuação...)
+(Parte central do conteúdo. Continuação direta.)
 
 [SEÇÃO 3]
-(Parte final...)
+(Parte final do conteúdo.)
 
-(Use quantas seções forem necessárias para cobrir o conteúdo).
+(Crie até [SEÇÃO 5] se o conteúdo for muito extenso).
+
+REGRAS:
+1. Respeite o idioma ${targetLanguage}.
+2. NÃO repita tópicos entre as seções.
+3. Cada seção deve ter conteúdo único.
 `;
 
 const getNeutralScript = (targetLanguage: string, culturalContext: string) => `
-Gere o roteiro de narração para esta parte do vídeo.
+Gere o roteiro de narração (texto falado) para esta parte do vídeo.
 
 IDIOMA: ${targetLanguage}
 CONTEXTO: ${culturalContext}
 CANAL: [canal]
 
-INSTRUÇÕES DO USUÁRIO (Estilo):
+INSTRUÇÕES DE ESTILO (Do Usuário):
 """
 [prompt_usuario]
 """
 
-Converta a premissa desta seção em texto de narração (falado), seguindo o estilo solicitado acima.
+Converta a premissa fornecida acima em texto de narração fluido.
+Ignore instruções de "Comece com..." se esta não for a primeira parte.
 `;
 
-// --- FUNÇÕES DE EXPORTAÇÃO (INTEGRAÇÃO TOTAL) ---
+// --- EXPORTAÇÃO ---
 
-// Mantemos um objeto vazio ou cache se necessário, mas o foco é a geração dinâmica
 export const defaultPrompts: Record<string, PromptTemplate> = {};
 
-/**
- * Gera os prompts automaticamente buscando o nome correto do idioma
- * no seu arquivo languages.ts
- */
 export function getDefaultPrompts(languageCode: string): PromptTemplate {
-  // Busca as informações ricas do idioma (Nome, Contexto Cultural)
+  // Busca dados ricos do idioma no seu arquivo languages.ts
   const langObj = getLanguageByCode(languageCode);
 
-  // Define o nome legível (ex: "Português (Brasil)" em vez de "pt-BR")
   const langName = langObj ? langObj.name : languageCode;
   const context = langObj ? langObj.culturalContext : "";
 
@@ -83,9 +83,7 @@ export function getSystemInstructions(languageCode: string): string {
   const langObj = getLanguageByCode(languageCode);
   const langName = langObj ? langObj.name : languageCode;
 
-  return `INSTRUÇÕES DE SISTEMA:
-1. Você é um assistente especializado em roteiros multilíngues.
-2. Sua prioridade máxima é escrever em **${langName}**.
-3. Siga estritamente o prompt do usuário.
-4. Mantenha a formatação técnica [SEÇÃO X] para o parser funcionar.`;
+  return `System: Você é um assistente de roteiro focado em fidelidade ao prompt do usuário e formatação técnica.
+  Idioma prioritário: ${langName}.
+  Mantenha as tags [SEÇÃO X] intactas.`;
 }
