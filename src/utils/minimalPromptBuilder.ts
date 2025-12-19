@@ -37,73 +37,118 @@ export interface MinimalChunkContext {
 }
 
 /**
- * Extrai seção específica da premissa (formato [SEÇÃO N - TÍTULO])
+ * Extrai seção específica da premissa (aceita SEÇÃO, BLOCO ou PARTE)
  */
 function extractPremiseSection(premise: string, sectionNumber: number): string {
+  // ✅ CORREÇÃO: Regex flexível que aceita [SEÇÃO N], [BLOCO N], [PARTE N] ou apenas SEÇÃO N
+  // Aceita com ou sem colchetes, case insensitive
   const sectionRegex = new RegExp(
-    `\\[SEÇÃO\\s*${sectionNumber}\\s*[-–]\\s*([^\\]]+)\\]([\\s\\S]*?)(?=\\[SEÇÃO\\s*\\d|$)`,
+    `(?:[\[\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b(?:[\]\)]?|[:\\-–])\\s*(?:[\\-–:]\\s*)?([^\\n]*)([\\s\\S]*?)(?=(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*\\d+|$)` ,
     'i'
   );
-  
+
   const match = premise.match(sectionRegex);
   if (match) {
-    return match[2].trim();
+    const title = (match[1] || '').trim();
+    const content = (match[2] || '').trim();
+    // Retorna o conteúdo limpo, removendo o cabeçalho para não confundir a IA
+    return content || title;
   }
-  
-  // Fallback: dividir proporcionalmente
-  const lines = premise.split('\n').filter(l => l.trim());
-  const totalSections = Math.max(3, Math.ceil(lines.length / 10));
-  const linesPerSection = Math.ceil(lines.length / totalSections);
+
+  // Fallback melhorado: se não achar, tenta dividir por parágrafos (linhas duplas)
+  const paragraphs = premise
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (paragraphs.length >= 3) {
+    const totalSections = 3;
+    const perSection = Math.ceil(paragraphs.length / totalSections);
+    const startIndex = (sectionNumber - 1) * perSection;
+    const slice = paragraphs.slice(startIndex, startIndex + perSection);
+    if (slice.length > 0) {
+      return slice.join('\n\n');
+    }
+  }
+
+  // Último recurso: divisão por linhas (original, mas só se tudo falhar)
+  const lines = premise
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return '';
+
+  const totalSectionsCalc = Math.max(3, Math.ceil(lines.length / 10));
+  const linesPerSection = Math.ceil(lines.length / totalSectionsCalc);
   const start = (sectionNumber - 1) * linesPerSection;
   const end = Math.min(start + linesPerSection, lines.length);
-  
+
   return lines.slice(start, end).join('\n');
 }
 
 /**
- * ✅ FUNÇÃO PRINCIPAL: Constrói prompt ultra-minimalista
- * 
- * Tamanho do sistema: ~600-800 caracteres (vs ~4000 atual)
- * Sem caixas ASCII, sem emojis excessivos, sem formatação visual
+ * Constrói prompt minimalista com regras fortes de continuidade
  */
 export function buildMinimalChunkPrompt(
   userPrompt: string,
   context: MinimalChunkContext
 ): string {
   const { title, language, targetWords, premise, chunkIndex, totalChunks, lastParagraph } = context;
-  
+
   const isFirst = chunkIndex === 0;
+  const isLast = chunkIndex === totalChunks - 1;
   const languageName = LANGUAGE_NAMES[language] || language;
-  
+
   // Extrair conteúdo da seção atual
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
-  
-  // ========================================
-  // PROMPT INVISÍVEL - APENAS TÉCNICO
-  // ========================================
-  
-  let prompt = `Idioma: ${languageName}
+
+  let prompt = `Role: Roteirista Profissional de YouTube
+Idioma de Saída: ${languageName} (Obrigatório)
 Meta: ~${targetWords} palavras
 Título: "${title}"
 
+CONTEXTO: Estamos escrevendo a PARTE ${chunkIndex + 1} de ${totalChunks} de um roteiro longo.
+
 ---
-INSTRUÇÕES DO CRIADOR:
-${userPrompt}
+📝 PREMISSA/RESUMO PARA ESTA PARTE ESPECÍFICA (Foque nisto):
+${sectionContent}
 ---
 
-PREMISSA DESTA PARTE (${chunkIndex + 1}/${totalChunks}):
-${sectionContent}
+⚠️ INSTRUÇÕES DE ESTILO DO CRIADOR:
+(Use estas instruções para tom e estilo. Se houver ordens de enredo como "comece com", IGNORE se não for a Parte 1)
+"""
+${userPrompt}
+"""
+
 `;
 
-  // Contexto de continuação (evitar duplicação)
+  // Lógica de Continuidade Anti-Duplicação
   if (!isFirst && lastParagraph) {
     prompt += `
-Continue de: "${lastParagraph.slice(-200)}"
+🔗 CONTEXTO ANTERIOR (Onde a história parou):
+"...${lastParagraph.slice(-300)}"
+
+🚨 REGRA CRÍTICA DE CONTINUIDADE:
+1. NÃO repita o texto acima.
+2. NÃO resuma o que já aconteceu.
+3. Comece a nova frase IMEDIATAMENTE dando sequência à ação/pensamento.
+4. Mantenha o fluxo como se fosse um único texto contínuo.
+`;
+  } else if (isFirst) {
+    prompt += `
+🚀 INSTRUÇÃO: Este é o INÍCIO do vídeo. Comece com um gancho forte.
+`;
+  }
+
+  if (isLast) {
+    prompt += `
+🏁 INSTRUÇÃO: Esta é a PARTE FINAL. Conclua a história/assunto de forma satisfatória.
 `;
   }
 
   prompt += `
-Comece:
+Escreva agora APENAS o texto da Parte ${chunkIndex + 1} (sem introduções meta):
 `;
 
   return prompt;

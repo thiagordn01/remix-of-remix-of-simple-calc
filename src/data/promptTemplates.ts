@@ -4,30 +4,23 @@ export interface PromptTemplate {
 }
 
 export const defaultPrompts: Record<string, PromptTemplate> = {
-  'pt-BR': {
+'pt-BR': {
     premise: `Crie uma premissa estruturada para um vídeo sobre "[titulo]".
 
-⚠️ ESTRUTURA OBRIGATÓRIA:
+⚠️ ESTRUTURA OBRIGATÓRIA (Use exatamente estas tags):
 
-Divida a premissa em 3 BLOCOS TEMPORAIS claros:
+[SEÇÃO 1 - INÍCIO]
+(Descreva: contexto inicial, problema, gancho, primeiros eventos - aprox 30%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCO 1 - INÍCIO (primeiros 30% do vídeo):
-[Descreva: contexto inicial, problema, gancho, primeiros eventos]
+[SEÇÃO 2 - DESENVOLVIMENTO]
+(Descreva: evolução dos eventos, tensão crescente, descobertas - aprox 40%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCO 2 - DESENVOLVIMENTO (40-50% do meio):
-[Descreva: evolução dos eventos, tensão crescente, descobertas]
+[SEÇÃO 3 - CONCLUSÃO]
+(Descreva: clímax/confronto principal, resolução, reflexão final - aprox 30%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCO 3 - CONCLUSÃO (últimos 20-30%):
-[Descreva: clímax/confronto principal, resolução, reflexão final]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🚨 REGRA CRÍTICA: 
-Cada evento deve aparecer em APENAS UM bloco.
-Não repita eventos entre blocos.
+🚨 REGRA CRÍTICA:
+Cada evento deve aparecer em APENAS UMA seção.
+Não repita eventos entre seções.
 
 Mantenha relevância para o público de [localizacao].
 Duração alvo: [duracao] minutos (150 palavras/min).
@@ -57,27 +50,20 @@ Se precisar transmitir pausas dramáticas, use a própria narrativa (ex: "Um sil
   'en-US': {
     premise: `Create a structured premise for a video about "[titulo]".
 
-⚠️ MANDATORY STRUCTURE:
+⚠️ MANDATORY STRUCTURE (Use exactly these tags):
 
-Divide the premise into 3 clear TEMPORAL BLOCKS:
+[SECTION 1 - BEGINNING]
+(Describe: initial context, problem, hook, first events - approx 30%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCK 1 - BEGINNING (first 30% of video):
-[Describe: initial context, problem, hook, first events]
+[SECTION 2 - DEVELOPMENT]
+(Describe: event evolution, rising tension, discoveries - approx 40%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCK 2 - DEVELOPMENT (middle 40-50%):
-[Describe: event evolution, rising tension, discoveries]
+[SECTION 3 - CONCLUSION]
+(Describe: main climax/confrontation, resolution, final reflection - approx 30%)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 BLOCK 3 - CONCLUSION (last 20-30%):
-[Describe: main climax/confrontation, resolution, final reflection]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🚨 CRITICAL RULE: 
-Each event must appear in ONLY ONE block.
-Do not repeat events between blocks.
+🚨 CRITICAL RULE:
+Each event must appear in ONLY ONE section.
+Do not repeat events between sections.
 
 Keep relevance for the audience from [localizacao].
 Target duration: [duracao] minutes (150 words/min).
