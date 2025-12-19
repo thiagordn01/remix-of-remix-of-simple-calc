@@ -4,7 +4,7 @@ export interface PromptTemplate {
 }
 
 export const defaultPrompts: Record<string, PromptTemplate> = {
-'pt-BR': {
+  "pt-BR": {
     premise: `Crie uma premissa estruturada para um vídeo sobre "[titulo]".
 
 ⚠️ ESTRUTURA OBRIGATÓRIA (Use exatamente estas tags):
@@ -18,13 +18,15 @@ export const defaultPrompts: Record<string, PromptTemplate> = {
 [SEÇÃO 3 - CONCLUSÃO]
 (Descreva: clímax/confronto principal, resolução, reflexão final - aprox 30%)
 
-🚨 REGRA CRÍTICA:
+🚨 REGRA CRÍTICA: 
 Cada evento deve aparecer em APENAS UMA seção.
 Não repita eventos entre seções.
 
 Mantenha relevância para o público de [localizacao].
-Duração alvo: [duracao] minutos (150 palavras/min).
+Duração alvo: [duracao] minutos.
 Escreva em português brasileiro.`,
+
+    // ... mantenha o resto do arquivo igual ...
 
     script: `Com base na premissa fornecida, crie um roteiro detalhado para YouTube sobre "[titulo]".
 
@@ -44,10 +46,10 @@ Escreva o roteiro completo, pronto para ser narrado.
 Este é um roteiro de NARRAÇÃO PURA (formato audiobook), não roteiro de produção.
 NÃO inclua indicações técnicas como "Silêncio.", "Pausa.", efeitos sonoros, ou notas de produção.
 APENAS texto narrativo corrido que será lido em voz alta.
-Se precisar transmitir pausas dramáticas, use a própria narrativa (ex: "Um silêncio pesado tomou conta...").`
+Se precisar transmitir pausas dramáticas, use a própria narrativa (ex: "Um silêncio pesado tomou conta...").`,
   },
 
-  'en-US': {
+  "en-US": {
     premise: `Create a structured premise for a video about "[titulo]".
 
 ⚠️ MANDATORY STRUCTURE (Use exactly these tags):
@@ -87,17 +89,17 @@ Write the complete script, ready to be narrated.
 This is a PURE NARRATION script (audiobook format), not a production script.
 DO NOT include technical cues like "Silence.", "Pause.", sound effects, or production notes.
 ONLY continuous narrative text that will be read aloud.
-If you need to convey dramatic pauses, use the narrative itself (e.g., "A heavy silence fell...").`
-  }
+If you need to convey dramatic pauses, use the narrative itself (e.g., "A heavy silence fell...").`,
+  },
 };
 
 export function getDefaultPrompts(language: string): PromptTemplate {
-  return defaultPrompts[language] || defaultPrompts['pt-BR'];
+  return defaultPrompts[language] || defaultPrompts["pt-BR"];
 }
 
 export function getSystemInstructions(language: string): string {
   const instructions = {
-    'pt-BR': `INSTRUÇÕES CRÍTICAS DE SISTEMA - SIGA RIGOROSAMENTE:
+    "pt-BR": `INSTRUÇÕES CRÍTICAS DE SISTEMA - SIGA RIGOROSAMENTE:
 
 🎯 FIDELIDADE ABSOLUTA AO TÍTULO E CONTEXTO:
 1. O título "[titulo]" é SAGRADO - todo o conteúdo DEVE ser sobre este tema específico
@@ -131,7 +133,7 @@ export function getSystemInstructions(language: string): string {
 18. Priorize QUALIDADE e RELEVÂNCIA sobre quantidade de palavras
 19. Desenvolva o tema de forma aprofundada e envolvente`,
 
-    'en-US': `CRITICAL SYSTEM INSTRUCTIONS - FOLLOW RIGOROUSLY:
+    "en-US": `CRITICAL SYSTEM INSTRUCTIONS - FOLLOW RIGOROUSLY:
 
 🎯 ABSOLUTE FIDELITY TO TITLE AND CONTEXT:
 1. The title "[titulo]" is SACRED - all content MUST be about this specific topic
@@ -163,7 +165,7 @@ export function getSystemInstructions(language: string): string {
 18. Prioritize QUALITY and RELEVANCE over word quantity
 19. Develop the theme in depth and engagingly`,
 
-    'es-ES': `INSTRUCCIONES CRÍTICAS DEL SISTEMA - SIGUE RIGUROSAMENTE:
+    "es-ES": `INSTRUCCIONES CRÍTICAS DEL SISTEMA - SIGUE RIGUROSAMENTE:
 
 🎯 FIDELIDAD ABSOLUTA AL TÍTULO Y CONTEXTO:
 1. El título "[titulo]" es SAGRADO - todo el contenido DEBE ser sobre este tema específico
@@ -193,8 +195,8 @@ export function getSystemInstructions(language: string): string {
 🔥 DURACIÓN Y CALIDAD:
 17. Respeta RIGUROSAMENTE la duración especificada (150 palabras por minuto)
 18. Prioriza CALIDAD y RELEVANCIA sobre cantidad de palabras
-19. Desarrolla el tema en profundidad y de manera atractiva`
+19. Desarrolla el tema en profundidad y de manera atractiva`,
   };
 
-  return instructions[language] || instructions['pt-BR'];
+  return instructions[language] || instructions["pt-BR"];
 }
