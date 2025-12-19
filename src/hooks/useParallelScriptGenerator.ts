@@ -141,6 +141,64 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
     return 0;
   }, []);
 
+  // ✅ NOVO: Função helper centralizada para finalizar job (curto ou chunkado)
+  const finalizeJob = useCallback(
+    (jobId: string, rawScript: string, targetWords: number) => {
+      const job = jobsRef.current.find(j => j.id === jobId);
+      if (!job) return;
+
+      // Aplicar limpeza COMPLETA apenas sobre o roteiro final concatenado
+      const cleanedFullScript = cleanFinalScript(rawScript);
+      const totalWordCount = cleanedFullScript.split(/\s+/).filter(Boolean).length;
+
+      addLog(jobId, `✅ Roteiro completo gerado: ${totalWordCount} palavras`);
+      addLog(
+        jobId,
+        `⏱️ Duração estimada: ~${Math.ceil(totalWordCount / 150)} minutos`
+      );
+
+      // Capturar estatísticas das APIs para diagnóstico
+      const apiStats = enhancedGeminiService.getApiStats();
+
+      // Logar estatísticas de uso de APIs (apenas para Gemini)
+      const activeApis = getActiveApiKeys();
+      const totalApisUsed = job.usedApiIds?.length || 0;
+      if (activeApis.length > 0) {
+        addLog(
+          jobId,
+          `📊 Total de APIs diferentes usadas neste job: ${totalApisUsed}/${activeApis.length}`
+        );
+      } else if (totalApisUsed > 0) {
+        addLog(
+          jobId,
+          `📊 Total de APIs diferentes usadas neste job: ${totalApisUsed}`
+        );
+      }
+
+      // Liberar APIs usadas por este job do pool global
+      const releasedCount = releaseJobApisFromGlobalPool(jobId);
+      if (releasedCount > 0) {
+        addLog(jobId, `🔓 ${releasedCount} APIs liberadas para outros jobs`);
+      }
+
+      // Atualizar estado do job como concluído
+      updateJob(jobId, {
+        status: 'completed',
+        script: cleanedFullScript,
+        wordCount: totalWordCount,
+        progress: 100,
+        endTime: new Date(),
+        apiStats,
+      });
+
+      const totalTime = Math.round(
+        (new Date().getTime() - job.startTime.getTime()) / 1000
+      );
+      addLog(jobId, `🎉 Geração concluída com sucesso em ${totalTime}s!`);
+    },
+    [addLog, getActiveApiKeys, releaseJobApisFromGlobalPool, updateJob]
+  );
+
   // ✅ NOVO: Função para reservar APIs exclusivas para um job (API única por processo)
   // Retorna { apis: GeminiApiKey[], poolWasReset: boolean }
   const reserveApisForJob = useCallback((job: GenerationJob, allApis: GeminiApiKey[]): { apis: GeminiApiKey[], poolWasReset: boolean } => {
@@ -857,6 +915,9 @@ REGRAS:
           const chunkWordCount = chunk.split(/\s+/).length;
           addLog(jobId, `✅ Parte ${i + 1}/${numberOfChunks} concluída: ${chunkWordCount} palavras`);
         }
+
+        addLog(jobId, '✅ Todos os chunks do roteiro foram gerados. Aplicando limpeza final única...');
+        finalizeJob(jobId, script, targetWords);
       } else {
         // Roteiro curto/médio (<1500 palavras) - gerar de uma vez
         addLog(jobId, `📝 Gerando roteiro completo em 1 requisição (~${targetWords} palavras)`);
@@ -967,38 +1028,8 @@ REGRAS:
           script = sanitizeScript(script);
         }
 
-        // Aplicar limpeza COMPLETA apenas sobre o roteiro final concatenado
-        const cleanedFullScript = cleanFinalScript(script);
-        const totalWordCount = cleanedFullScript.split(/\s+/).filter(Boolean).length;
-
-        addLog(jobId, `✅ Roteiro completo gerado: ${totalWordCount} palavras`);
-        addLog(jobId, `⏱️ Duração estimada: ~${Math.ceil(totalWordCount / 150)} minutos`);
-
-        // Capturar estatísticas das APIs para diagnóstico
-        const apiStats = enhancedGeminiService.getApiStats();
-
-        // Finalizar job
-        // ✅ CORRIGIDO: Usar função helper para liberar APIs de forma consistente
-        const finalJob = jobsRef.current.find(j => j.id === jobId);
-        const totalApisUsed = finalJob?.usedApiIds?.length || 0;
-        addLog(jobId, `📊 Total de APIs diferentes usadas neste job: ${totalApisUsed}/${activeApis.length}`);
-
-        const releasedCount = releaseJobApisFromGlobalPool(jobId);
-        if (releasedCount > 0) {
-          addLog(jobId, `🔓 ${releasedCount} APIs liberadas para outros jobs`);
-        }
-
-        updateJob(jobId, {
-          status: 'completed',
-          script: cleanedFullScript,
-          wordCount: totalWordCount,
-          progress: 100,
-          endTime: new Date(),
-          apiStats
-        });
-
-        const totalTime = Math.round((new Date().getTime() - job.startTime.getTime()) / 1000);
-        addLog(jobId, `🎉 Geração concluída com sucesso em ${totalTime}s!`);
+        // ✅ Aplicar limpeza COMPLETA e finalizar job usando helper compartilhado
+        finalizeJob(jobId, script, targetWords);
 
     }
 
