@@ -36,7 +36,6 @@ export interface ScriptGenerationRequest {
   duration?: number; // em minutos
   language?: string;
   location?: string;
-  premiseWordTarget?: number;
 }
 
 export interface ScriptGenerationResult {

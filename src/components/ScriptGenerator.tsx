@@ -73,8 +73,7 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
       scriptPrompt: undefined,
       duration: undefined,
       language: undefined,
-      location: undefined,
-      premiseWordTarget: undefined
+      location: undefined
     }));
   };
 
@@ -303,18 +302,6 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
                         placeholder="Brasil"
                         value={request.location || ''}
                         onChange={(e) => setRequest(prev => ({ ...prev, location: e.target.value || undefined }))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="premiseWordTarget">Palavras Premissa</Label>
-                      <Input
-                        id="premiseWordTarget"
-                        type="number"
-                        min="200"
-                        max="2000"
-                        placeholder="700"
-                        value={request.premiseWordTarget || ''}
-                        onChange={(e) => setRequest(prev => ({ ...prev, premiseWordTarget: parseInt(e.target.value) || undefined }))}
                       />
                     </div>
                   </div>

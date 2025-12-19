@@ -84,8 +84,7 @@ export const useScriptGenerator = () => {
         scriptPrompt: request.scriptPrompt || agent?.scriptPrompt || '',
         duration: request.duration || agent?.duration || 10,
         language: detectedLanguage, // Prioriza configuração explícita, fallback para detecção
-        location: request.location || agent?.location || 'Brasil',
-        premiseWordTarget: request.premiseWordTarget || agent?.premiseWordTarget || 700
+        location: request.location || agent?.location || 'Brasil'
       };
 
       // Validar configurações
@@ -120,7 +119,7 @@ export const useScriptGenerator = () => {
       console.log(`Usando provedor: ${providerName}`);
 
       // Gerar premissa usando Enhanced Gemini Service
-      const premiseTargetWords = config.premiseWordTarget;
+      const premiseTargetWords = 700;
       
       setProgress({
         stage: 'premise',
@@ -166,7 +165,7 @@ export const useScriptGenerator = () => {
       console.log(`✅ Premissa gerada: ${premiseWordCount} palavras`);
 
       // ✅ VERSÃO 2.0: Calcular número de seções baseado na premissa
-      const targetWords = config.duration * 150;
+      const targetWords = config.duration * 170;
       const numberOfSections = countSectionsInPremise(premise);
       const wordsPerSection = Math.ceil(targetWords / numberOfSections);
 
@@ -323,7 +322,7 @@ export const useScriptGenerator = () => {
 
       const script = scriptChunks.map(chunk => chunk.content);
       const totalWords = scriptChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
-      const estimatedDuration = totalWords / 150;
+      const estimatedDuration = totalWords / 170;
 
       const finalResult: ScriptGenerationResult = {
         premise,

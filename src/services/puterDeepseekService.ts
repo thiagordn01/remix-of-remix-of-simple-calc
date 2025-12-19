@@ -399,7 +399,7 @@ export class PuterDeepseekService {
 
   async generatePremise(
     prompt: string,
-    targetWords: number = 1000,
+    targetWords: number = 700,
     onProgress?: (message: string) => void
   ): Promise<{ content: string; usedApiId: string }> {
     onProgress?.(`Iniciando geracao de premissa (${targetWords} palavras)`);
