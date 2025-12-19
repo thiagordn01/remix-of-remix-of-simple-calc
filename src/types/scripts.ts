@@ -33,10 +33,12 @@ export interface ScriptGenerationRequest {
   channelName?: string;
   premisePrompt?: string;
   scriptPrompt?: string;
+  premiseWordTarget?: number; // alvo técnico de palavras para premissa (opcional)
   duration?: number; // em minutos
   language?: string;
   location?: string;
 }
+
 
 export interface ScriptGenerationResult {
   premise: string;

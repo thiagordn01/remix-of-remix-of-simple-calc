@@ -3,7 +3,8 @@ import { ScriptGenerationRequest, ScriptGenerationResult, ScriptGenerationProgre
 import { Agent } from '@/types/agents';
 import { enhancedGeminiService } from '@/services/enhancedGeminiApi';
 import { puterDeepseekService } from '@/services/puterDeepseekService';
-import { injectPremiseContext, buildChunkPrompt, generateProgressiveSummary, ProgressiveSummary } from '@/utils/promptInjector';
+import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from '@/utils/promptInjector';
+import { cleanFinalScript, validateScriptQuality } from '@/utils/scriptCleanup';
 import { useToast } from '@/hooks/use-toast';
 
 /**
@@ -119,7 +120,7 @@ export const useScriptGenerator = () => {
       console.log(`Usando provedor: ${providerName}`);
 
       // Gerar premissa usando Enhanced Gemini Service
-      const premiseTargetWords = 700;
+      const premiseTargetWords = request.premiseWordTarget || 700;
       
       setProgress({
         stage: 'premise',
@@ -131,8 +132,7 @@ export const useScriptGenerator = () => {
         percentage: 10
       });
 
-      // ✅ VERSÃO 2.0: Calcular número de seções baseado na duração
-      // Mais seções = mais chunks = melhor granularidade
+      // Calcular número de seções para diagnóstico apenas (não usamos mais estrutura fixa)
       const numberOfSectionsForPremise = Math.max(3, Math.ceil(config.duration / 3));
 
       // Injetar contexto automaticamente no prompt de premissa
@@ -164,16 +164,19 @@ export const useScriptGenerator = () => {
       const premiseWordCount = premise.split(/\s+/).length;
       console.log(`✅ Premissa gerada: ${premiseWordCount} palavras`);
 
-      // ✅ VERSÃO 2.0: Calcular número de seções baseado na premissa
+      // Calcular palavras alvo com base na duração
       const targetWords = config.duration * 170;
-      const numberOfSections = countSectionsInPremise(premise);
-      const wordsPerSection = Math.ceil(targetWords / numberOfSections);
+
+      // Definir número de partes baseado em blocos de ~10 minutos
+      const minutesPerChunk = 10;
+      const numberOfChunks = Math.max(1, Math.ceil(config.duration / minutesPerChunk));
+      const wordsPerChunk = Math.ceil(targetWords / numberOfChunks);
 
       console.log(`📊 Diagnóstico de geração:
   - Duração: ${config.duration} min
   - Palavras alvo total: ${targetWords}
-  - Seções na premissa: ${numberOfSections}
-  - Palavras por seção: ${wordsPerSection}
+  - Partes (chunks): ${numberOfChunks}
+  - Palavras por parte: ${wordsPerChunk}
   - Idioma: ${detectedLanguage}
   - Provedor: ${providerName}
 `);
@@ -181,148 +184,110 @@ export const useScriptGenerator = () => {
       setProgress({
         stage: 'script',
         currentChunk: 1,
-        totalChunks: numberOfSections,
+        totalChunks: numberOfChunks,
         completedWords: 0,
         targetWords: targetWords,
         isComplete: false,
         percentage: 35,
-        message: `Iniciando geração do roteiro (${numberOfSections} seções)...`
+        message: `Iniciando geração do roteiro (${numberOfChunks} partes)...`
       });
 
       let scriptContent = '';
       const scriptChunks: ScriptChunk[] = [];
 
-      // ✅ VERSÃO 3.1: Inicializar resumo progressivo
-      let progressiveSummary: ProgressiveSummary = {
-        eventsNarrated: [],
-        revelationsMade: [],
-        lastSentences: '',
-        totalWordsWritten: 0,
-        sectionsCompleted: 0
-      };
+      for (let i = 0; i < numberOfChunks; i++) {
+        const chunkTargetWords = wordsPerChunk;
 
-      // ✅ VERSÃO 3.1: SEMPRE gerar em seções com contexto progressivo
-      // Cada seção recebe informação do que já foi narrado para evitar repetição
-      if (true) { // Sempre usar seções
-        const numberOfChunks = numberOfSections;
+        setProgress({
+          stage: 'script',
+          currentChunk: i + 1,
+          totalChunks: numberOfChunks,
+          completedWords: scriptContent.split(/\s+/).length,
+          targetWords: targetWords,
+          isComplete: false,
+          percentage: 35 + ((i / numberOfChunks) * 55),
+          message: `Gerando parte ${i + 1}/${numberOfChunks}...`
+        });
 
-        for (let i = 0; i < numberOfChunks; i++) {
-          // ✅ VERSÃO 3.1: Cada seção tem ~wordsPerSection palavras
-          const chunkTargetWords = wordsPerSection;
-          
-      setProgress({
-        stage: 'script',
-        currentChunk: i + 1,
-        totalChunks: numberOfChunks,
-        completedWords: scriptContent.split(/\s+/).length,
-        targetWords: targetWords,
-        isComplete: false,
-        percentage: 35 + ((i / numberOfChunks) * 55),
-        message: `Gerando chunk ${i + 1}/${numberOfChunks}...`
-      });
+        const lastParagraph = extractLastParagraph(scriptContent);
 
-          // ✅ VERSÃO 3.1: Usar buildChunkPrompt com CONTEXTO PROGRESSIVO
-          const chunkPrompt = buildChunkPrompt(config.scriptPrompt, {
-            title: request.title,
-            channelName: config.channelName,
-            duration: config.duration,
-            language: detectedLanguage,
-            location: config.location,
-            premise: premise, // ✅ SEMPRE presente
-            previousContent: scriptContent, // ✅ TODO o roteiro acumulado
-            chunkIndex: i,
-            totalChunks: numberOfChunks,
-            targetWords: chunkTargetWords,
-            progressiveSummary: progressiveSummary // ✅ NOVO: Resumo progressivo para anti-repetição
-          });
+        const chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
+          title: request.title,
+          language: detectedLanguage,
+          targetWords: chunkTargetWords,
+          premise: premise,
+          chunkIndex: i,
+          totalChunks: numberOfChunks,
+          lastParagraph: i > 0 ? lastParagraph : undefined
+        });
 
-          // Gerar chunk usando o provedor selecionado
-          const chunkContext = {
-            premise,
-            previousContent: scriptContent,
-            chunkIndex: i,
-            totalChunks: numberOfChunks,
-            targetWords: chunkTargetWords,
-            language: detectedLanguage,
-            location: config.location,
-            isLastChunk: i === numberOfChunks - 1
-          };
+        // Gerar chunk usando o provedor selecionado
+        const chunkContext = {
+          premise,
+          previousContent: scriptContent,
+          chunkIndex: i,
+          totalChunks: numberOfChunks,
+          targetWords: chunkTargetWords,
+          language: detectedLanguage,
+          location: config.location,
+          isLastChunk: i === numberOfChunks - 1
+        };
 
-          const chunkResult = provider === 'deepseek'
-            ? await puterDeepseekService.generateScriptChunk(
-                chunkPrompt,
-                chunkContext,
-                (message) => console.log(`Roteiro parte ${i + 1} (DeepSeek):`, message)
-              )
-            : await enhancedGeminiService.generateScriptChunk(
-                chunkPrompt,
-                activeGeminiKeys,
-                chunkContext,
-                (message) => console.log(`Roteiro parte ${i + 1} (Gemini):`, message)
-              );
+        const chunkResult = provider === 'deepseek'
+          ? await puterDeepseekService.generateScriptChunk(
+              chunkPrompt,
+              chunkContext,
+              (message) => console.log(`Roteiro parte ${i + 1} (DeepSeek):`, message)
+            )
+          : await enhancedGeminiService.generateScriptChunk(
+              chunkPrompt,
+              activeGeminiKeys,
+              chunkContext,
+              (message) => console.log(`Roteiro parte ${i + 1} (Gemini):`, message)
+            );
 
-          // ✅ VERSÃO 2.0: Seções são independentes - não há duplicação
-          // ✅ Sanitizar para remover metadados técnicos que escaparam
-          const chunk = sanitizeScript(chunkResult.content);
-          const chunkWordCount = chunk.split(/\s+/).length;
+        // Limpeza técnica pós-geração (metadados, duplicações locais, CTAs em eco)
+        const cleanedChunk = cleanFinalScript(chunkResult.content);
+        const chunkWordCount = cleanedChunk.split(/\s+/).length;
 
-          console.log(`\n═══════════════════════════════════════════════════`);
-          console.log(`📝 SEÇÃO ${i + 1}/${numberOfChunks} GERADA`);
-          console.log(`📊 Palavras: ${chunkWordCount}`);
-          console.log(`═══════════════════════════════════════════════════\n`);
+        console.log(`\n═══════════════════════════════════════════════════`);
+        console.log(`📝 PARTE ${i + 1}/${numberOfChunks} GERADA`);
+        console.log(`📊 Palavras: ${chunkWordCount}`);
+        console.log(`═══════════════════════════════════════════════════\n`);
 
-          // ✅ Diagnóstico de fechamento (última seção)
-          if (i === numberOfChunks - 1) {
-            const lastWords = chunk.slice(-300);
-            console.log(`\n🏁 DIAGNÓSTICO DO FECHAMENTO:`);
-            console.log(`📝 Últimas 300 chars:`, lastWords);
-            
-            // Verificar padrões de CTA
-            const hasCTA = /inscrev|curt|coment|like|subscribe|sininho/i.test(lastWords);
-            const hasEnding = /\.$|!$|\?$/.test(lastWords.trim());
-            
-            console.log(`🎯 Contém CTA: ${hasCTA ? '✅' : '❌'}`);
-            console.log(`📌 Termina com pontuação: ${hasEnding ? '✅' : '❌'}`);
-          }
+        // Concatenar ao roteiro
+        scriptContent += (scriptContent ? '\n\n' : '') + cleanedChunk;
 
-          // Concatenar ao roteiro
-          scriptContent += (scriptContent ? '\n\n' : '') + chunk;
+        // Atualizar progresso
+        setProgress({
+          stage: 'script',
+          currentChunk: i + 1,
+          totalChunks: numberOfChunks,
+          completedWords: scriptContent.split(/\s+/).length,
+          targetWords: targetWords,
+          isComplete: false,
+          percentage: 35 + (((i + 1) / numberOfChunks) * 55),
+          currentApiKey: chunkResult.usedApiId,
+          message: `Parte ${i + 1}/${numberOfChunks} concluída`
+        });
 
-          // ✅ VERSÃO 3.1: Atualizar resumo progressivo após cada chunk
-          progressiveSummary = generateProgressiveSummary(scriptContent, progressiveSummary);
-          console.log(`📊 Resumo progressivo atualizado:
-  - Seções completadas: ${progressiveSummary.sectionsCompleted}
-  - Palavras escritas: ${progressiveSummary.totalWordsWritten}
-  - Últimas frases: "${progressiveSummary.lastSentences.slice(0, 100)}..."`);
-
-          // Atualizar progresso
-          setProgress({
-            stage: 'script',
-            currentChunk: i + 1,
-            totalChunks: numberOfChunks,
-            completedWords: scriptContent.split(/\s+/).length,
-            targetWords: targetWords,
-            isComplete: false,
-            percentage: 35 + (((i + 1) / numberOfChunks) * 55),
-            currentApiKey: chunkResult.usedApiId,
-            message: `Chunk ${i + 1}/${numberOfChunks} concluído`
-          });
-
-          const scriptChunk: ScriptChunk = {
-            id: crypto.randomUUID(),
-            content: chunk,
-            wordCount: chunkWordCount,
-            chunkIndex: i,
-            isComplete: true
-          };
-          scriptChunks.push(scriptChunk);
-        }
+        const scriptChunk: ScriptChunk = {
+          id: crypto.randomUUID(),
+          content: cleanedChunk,
+          wordCount: chunkWordCount,
+          chunkIndex: i,
+          isComplete: true
+        };
+        scriptChunks.push(scriptChunk);
       }
-      // ✅ VERSÃO 2.0: Removido bloco else - agora SEMPRE usamos seções independentes
 
       const script = scriptChunks.map(chunk => chunk.content);
       const totalWords = scriptChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
       const estimatedDuration = totalWords / 170;
+
+      // Diagnóstico técnico simples da qualidade final
+      const quality = validateScriptQuality(script.join('\n\n'), targetWords);
+      console.log('📊 Qualidade técnica do roteiro:', quality);
 
       const finalResult: ScriptGenerationResult = {
         premise,
