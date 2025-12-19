@@ -11,8 +11,9 @@ export function cleanFinalScript(raw: string): string {
   let text = baseSanitizeScript(raw);
   text = formatParagraphsForNarration(text);
 
-  // 2) Remover parágrafos consecutivos idênticos
+  // 2) Limpar duplicações em nível de parágrafo e frase
   text = removeConsecutiveDuplicates(text);
+  text = removeSentenceLevelDuplicates(text);
 
   // 3) Limitar eco de CTAs genéricos em excesso (bugs de modelo)
   text = limitRepeatedCtas(text);
@@ -46,7 +47,7 @@ export function removeConsecutiveDuplicates(text: string): string {
 /**
  * Evita flood de CTAs genéricos iguais várias vezes.
  * Mantém as primeiras ocorrências, corta apenas repetições posteriores
- * quando o parágrafo é basicamente só CTA.
+ * quando o parágrafo é basicamente só CTA ou quase todo CTA.
  */
 export function limitRepeatedCtas(text: string): string {
   const CTA_PATTERNS = [
@@ -65,10 +66,18 @@ export function limitRepeatedCtas(text: string): string {
 
     let isPureCta = false;
     let matchedKey: string | null = null;
+    let ctaSentences = 0;
+
+    // Contar frases com CTA dentro do parágrafo
+    const sentences = trimmed.split(/(?<=[\.!?…])\s+/);
 
     for (const pattern of CTA_PATTERNS) {
       if (pattern.test(trimmed)) {
         matchedKey = pattern.source;
+        for (const s of sentences) {
+          if (pattern.test(s)) ctaSentences++;
+        }
+
         // Considera "puro CTA" se o parágrafo for curto
         if (trimmed.length < 220) {
           isPureCta = true;
@@ -77,12 +86,14 @@ export function limitRepeatedCtas(text: string): string {
       }
     }
 
-    if (isPureCta && matchedKey) {
+    if (matchedKey) {
       const count = ctaCounts[matchedKey] ?? 0;
       ctaCounts[matchedKey] = count + 1;
 
+      const isMostlyCta = sentences.length > 0 && ctaSentences / sentences.length >= 0.5;
+
       // Mantém no máximo 2 ocorrências do mesmo bloco de CTA
-      if (count >= 2) {
+      if ((isPureCta || isMostlyCta) && count >= 2) {
         continue;
       }
     }
@@ -91,6 +102,34 @@ export function limitRepeatedCtas(text: string): string {
   }
 
   return cleaned.join('\n\n');
+}
+
+/**
+ * Remove duplicações de frases consecutivas dentro de cada parágrafo.
+ */
+function removeSentenceLevelDuplicates(text: string): string {
+  const paragraphs = text.split(/\n\n+/);
+
+  const cleanedParas = paragraphs.map((p) => {
+    const sentences = p.split(/(?<=[\.!?…])\s+/);
+    const cleanedSentences: string[] = [];
+
+    for (const s of sentences) {
+      const trimmed = s.trim();
+      if (!trimmed) continue;
+
+      const last = cleanedSentences[cleanedSentences.length - 1];
+      if (last && last.trim() === trimmed) {
+        continue;
+      }
+
+      cleanedSentences.push(trimmed);
+    }
+
+    return cleanedSentences.join(' ');
+  });
+
+  return cleanedParas.join('\n\n');
 }
 
 /**

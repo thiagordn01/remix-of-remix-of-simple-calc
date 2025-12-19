@@ -1478,16 +1478,20 @@ export class EnhancedGeminiService {
   async generatePremise(
     prompt: string,
     availableApis: GeminiApiKey[],
-    targetWords: number = 1000, // ✅ NOVO: 1000 palavras por padrão
+    targetWords?: number,
     onProgress?: (message: string) => void
   ): Promise<{ content: string; usedApiId: string }> {
-    onProgress?.(`📚 Iniciando geração de premissa em 1 única requisição (${targetWords} palavras)`);
+    const targetInfo = targetWords && targetWords > 0
+      ? `${targetWords} palavras (alvo sugestivo)`
+      : 'sem meta rígida de palavras';
+
+    onProgress?.(`📚 Iniciando geração de premissa em 1 única requisição (${targetInfo})`);
     
-    // ✅ NOVO: Sempre gerar premissa em 1 única requisição (sem chunks)
+    // Sempre gerar premissa em 1 única requisição (sem chunks)
     const result = await this.generateWithFidelity(
       prompt,
       availableApis,
-      { targetWords },
+      { targetWords: targetWords && targetWords > 0 ? targetWords : undefined },
       {
         temperature: 0.6, // ✅ CORREÇÃO: Reduzido de 0.8 para 0.6 (mais controle, menos "viagens")
         timeoutMs: 180000, // ✅ NOVO: 3 minutos (aumentado para suportar 1000 palavras)

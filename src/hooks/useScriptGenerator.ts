@@ -119,15 +119,15 @@ export const useScriptGenerator = () => {
       const providerName = provider === 'gemini' ? 'Gemini' : 'DeepSeek';
       console.log(`Usando provedor: ${providerName}`);
 
-      // Gerar premissa usando Enhanced Gemini Service
-      const premiseTargetWords = request.premiseWordTarget || 700;
+      // Gerar premissa sem meta rígida fixa de palavras (controle via prompt do criador)
+      const premiseTargetWords = request.premiseWordTarget ?? 0;
       
       setProgress({
         stage: 'premise',
         currentChunk: 1,
         totalChunks: 1,
         completedWords: 0,
-        targetWords: premiseTargetWords,
+        targetWords: premiseTargetWords || 0,
         isComplete: false,
         percentage: 10
       });
@@ -135,28 +135,28 @@ export const useScriptGenerator = () => {
       // Calcular número de seções para diagnóstico apenas (não usamos mais estrutura fixa)
       const numberOfSectionsForPremise = Math.max(3, Math.ceil(config.duration / 3));
 
-      // Injetar contexto automaticamente no prompt de premissa
+      // Injetar contexto automaticamente no prompt de premissa (modelo minimalista, sem meta de palavras)
       const processedPremisePrompt = injectPremiseContext(config.premisePrompt, {
         title: request.title,
         channelName: config.channelName,
         duration: config.duration,
         language: config.language,
         location: config.location
-      }, numberOfSectionsForPremise);
+      });
 
-      console.log(`Solicitando premissa com ${numberOfSectionsForPremise} secoes (${providerName})`);
+      console.log(`Solicitando premissa (diagnóstico: ${numberOfSectionsForPremise} secoes) com provedor ${providerName}`);
 
       // Gerar premissa usando o provedor selecionado
       const premiseResult = provider === 'deepseek'
         ? await puterDeepseekService.generatePremise(
             processedPremisePrompt,
-            premiseTargetWords,
+            premiseTargetWords || undefined,
             (message) => console.log('Premissa (DeepSeek):', message)
           )
         : await enhancedGeminiService.generatePremise(
             processedPremisePrompt,
             activeGeminiKeys,
-            premiseTargetWords,
+            premiseTargetWords || undefined,
             (message) => console.log('Premissa (Gemini):', message)
           );
 

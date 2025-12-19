@@ -58,73 +58,19 @@ function buildLanguageEnforcementBlock(languageCode: string, languageName: strin
   // Buscar instrução no idioma nativo, ou construir uma genérica
   const nativeInfo = LANGUAGE_NATIVE_NAMES[languageCode];
   const nativeName = nativeInfo?.name || languageName;
-  const nativeInstruction = nativeInfo?.instruction || `YOU MUST WRITE 100% IN ${languageName.toUpperCase()}. EVERY WORD MUST BE IN ${languageName.toUpperCase()}.`;
+  const nativeInstruction = nativeInfo?.instruction || `Você deve escrever 100% em ${languageName.toUpperCase()}.`;
 
   return `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨🚨🚨 REGRA CRÍTICA #0 - IDIOMA DE SAÍDA (LEIA ANTES DE TUDO!) 🚨🚨🚨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️⚠️⚠️ ATENÇÃO MÁXIMA - REGRA MAIS IMPORTANTE DE TODAS ⚠️⚠️⚠️
-
-🌍 IDIOMA DE SAÍDA CONFIGURADO: ${nativeName} (${languageCode})
-
-📋 AS INSTRUÇÕES TÉCNICAS ABAIXO ESTÃO EM PORTUGUÊS (são meta-instruções para você entender o contexto e formato)
-
-🎯 MAS TODO O CONTEÚDO QUE VOCÊ VAI GERAR DEVE SER 100% EM ${nativeName.toUpperCase()}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 REGRAS ABSOLUTAS DE IDIOMA (INVIOLÁVEIS):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1️⃣ TODO O ROTEIRO GERADO DEVE SER 100% EM ${nativeName.toUpperCase()}
-2️⃣ CADA PALAVRA, CADA FRASE, CADA PARÁGRAFO = ${nativeName.toUpperCase()}
-3️⃣ ZERO tolerância para mistura de idiomas
-4️⃣ NÃO escreva NENHUMA palavra em português, inglês ou outro idioma
-5️⃣ Se você escrever UMA ÚNICA PALAVRA em idioma errado, sua resposta será REJEITADA
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 INSTRUÇÃO NO IDIOMA ALVO:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[REGRAS DE IDIOMA - TÉCNICAS]
+- Escreva TODO o texto em ${nativeName} (${languageCode}).
+- Não misture outros idiomas.
+- O texto gerado será narrado diretamente.
 
 ${nativeInstruction}
-
-DO NOT MIX LANGUAGES. DO NOT WRITE IN PORTUGUESE.
-NÃO MISTURE IDIOMAS. NÃO ESCREVA EM PORTUGUÊS.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ EXEMPLO ERRADO (MISTURA DE IDIOMAS - NUNCA FAÇA ISSO):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-"Have you ever wondered what seria necessário para alcançar seus sonhos?
-Today vamos falar sobre isso..."
-
-❌ ERRADO! Misturou inglês ("Have you ever", "Today") com português ("seria necessário", "vamos falar")
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ EXEMPLO CORRETO (100% NO IDIOMA ALVO):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Para ${nativeName.toUpperCase()}:
-TODAS as palavras devem estar neste idioma, sem exceção.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔥 CONSEQUÊNCIAS DE MISTURAR IDIOMAS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Se você escrever em idioma errado ou misturar idiomas:
-❌ Sua resposta será REJEITADA completamente
-❌ O chunk será DESCARTADO
-❌ Você terá que REGENERAR tudo do zero
-❌ Isso causa atraso e desperdício de recursos
-
-💡 SEMPRE verifique: "Estou escrevendo 100% em ${nativeName.toUpperCase()}?"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
+`.trim();
 }
 
-export interface AgentContext {
+interface AgentContext {
   title: string;
   channelName?: string;
   duration: number;
@@ -135,11 +81,9 @@ export interface AgentContext {
 }
 
 /**
- * Injeta automaticamente o contexto do agente antes do prompt do usuário
- * Mantém retrocompatibilidade com prompts que já usam placeholders
+ * Injeta automaticamente o contexto básico do vídeo antes do prompt do usuário.
  */
-export function injectAgentContext(userPrompt: string, context: AgentContext): string {
-  // Construir contexto estruturado
+function injectAgentContext(userPrompt: string, context: AgentContext): string {
   const contextBlock = `=== INFORMAÇÕES DO VÍDEO ===
 Título: ${context.title}
 ${context.channelName ? `Canal: ${context.channelName}\n` : ''}Duração alvo: ${context.duration} minutos
@@ -152,29 +96,22 @@ ${userPrompt}`;
   return contextBlock;
 }
 
-/**
- * Geração de premissa com foco técnico mínimo.
- * O conteúdo (CTAs, tom, estrutura) vem 100% do prompt do usuário.
- */
 export function injectPremiseContext(
   userPrompt: string,
   context: Omit<AgentContext, 'premise'>,
-  numberOfSections?: number
+  _numberOfSections?: number
 ): string {
   const languageEnforcement = buildLanguageEnforcementBlock(context.language, context.language);
-
-  const targetWords = (context.duration || 10) * 150;
 
   const contextBlock = `
 ${languageEnforcement}
 
-TÍTULO: "${context.title}"
-CANAL: ${context.channelName || 'Canal'}
-DURAÇÃO ALVO: ${context.duration} minutos (~${targetWords} palavras)
-IDIOMA: ${context.language}
-PÚBLICO/LOCAL: ${context.location}
+Título do Vídeo: ${context.title}
+Canal: ${context.channelName || 'Canal'}
+Idioma: ${context.language}
+Localização/Público: ${context.location}
 
-INSTRUÇÕES DO CRIADOR (siga À RISCA):
+Instruções para a Premissa (SIGA EXATAMENTE O TEXTO ABAIXO):
 ${userPrompt}
 `;
 
