@@ -209,7 +209,11 @@ export const useScriptGenerator = () => {
           message: `Gerando parte ${i + 1}/${numberOfChunks}...`
         });
 
-        const lastParagraph = extractLastParagraph(scriptContent);
+        // ✅ SISTEMA ALINHADO AO APP DE REFERÊNCIA
+        // Para evitar reboots e duplicações, NÃO reenviamos o roteiro inteiro.
+        // Só usamos um pequeno trecho final como âncora de continuidade, e apenas
+        // quando necessário.
+        const lastParagraph = scriptContent ? extractLastParagraph(scriptContent) : '';
 
         const chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
           title: request.title,
@@ -218,13 +222,15 @@ export const useScriptGenerator = () => {
           premise: premise,
           chunkIndex: i,
           totalChunks: numberOfChunks,
-          lastParagraph: i > 0 ? lastParagraph : undefined
+          lastParagraph: i > 0 && lastParagraph ? lastParagraph : undefined
         });
 
-        // Gerar chunk usando o provedor selecionado
+        // Contexto passado para diagnósticos internos e DeepSeek.
+        // Para Gemini, o serviço já ignora previousContent no prompt para
+        // manter o comportamento próximo de uma conversa contínua por seção.
         const chunkContext = {
           premise,
-          previousContent: scriptContent,
+          previousContent: provider === 'deepseek' ? scriptContent : '',
           chunkIndex: i,
           totalChunks: numberOfChunks,
           targetWords: chunkTargetWords,
