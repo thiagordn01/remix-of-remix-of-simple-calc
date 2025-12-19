@@ -1,5 +1,5 @@
-// ✅ SISTEMA "PROMPT INVISÍVEL 3.0" - VERSÃO SELF-CONTAINED
-// Removemos imports externos para evitar conflitos de variáveis (SyntaxError)
+// ✅ src/utils/minimalPromptBuilder.ts
+// Versão corrigida com todas as exportações necessárias para evitar erros de TS2305
 
 export interface MinimalChunkContext {
   title: string;
@@ -12,7 +12,6 @@ export interface MinimalChunkContext {
   anchors?: string[];
 }
 
-// Lista interna para evitar dependências e erros de importação
 const LANGUAGE_NAMES: Record<string, string> = {
   "pt-BR": "Português Brasileiro",
   "pt-PT": "Português",
@@ -28,10 +27,9 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 /**
- * Extrai seção específica da premissa (Tags [SEÇÃO X] ou [BLOCO X])
+ * Extrai seção específica da premissa
  */
 function extractPremiseSection(premise: string, sectionNumber: number): string {
-  // Regex flexível que aceita SEÇÃO, BLOCO, PARTE, SECTION
   const sectionRegex = new RegExp(
     `(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b[^\\n]*([\\s\\S]*?)(?=(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*\\d+|$)`,
     "i",
@@ -39,38 +37,28 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
 
   const match = premise.match(sectionRegex);
   if (match) {
-    // Retorna o conteúdo limpo
     return match[1].replace(/^[:\-\s]+/, "").trim();
   }
 
-  // Fallback: Divisão por parágrafos duplos se não houver tags
+  // Fallback
   const paragraphs = premise.split(/\n\n+/).filter((p) => p.trim().length > 0);
-
   if (paragraphs.length >= 3) {
-    // Tenta mapear proporcionalmente
     const totalAvailable = paragraphs.length;
-    if (sectionNumber === 1) {
-      return paragraphs.slice(0, Math.ceil(totalAvailable * 0.3)).join("\n\n");
-    }
-    if (sectionNumber === 2) {
+    if (sectionNumber === 1) return paragraphs.slice(0, Math.ceil(totalAvailable * 0.3)).join("\n\n");
+    if (sectionNumber === 2)
       return paragraphs.slice(Math.ceil(totalAvailable * 0.3), Math.ceil(totalAvailable * 0.7)).join("\n\n");
-    }
     return paragraphs.slice(Math.ceil(totalAvailable * 0.7)).join("\n\n");
   }
 
-  return premise; // Último caso
+  return premise;
 }
 
 /**
- * ✅ CONSTRUTOR DE PROMPT BLINDADO
- * Inclui instruções negativas para evitar loops e duplicação
+ * Constrói o prompt "blindado" contra repetições
  */
 export function buildMinimalChunkPrompt(userPrompt: string, context: MinimalChunkContext): string {
   const { title, language, targetWords, premise, chunkIndex, totalChunks, lastParagraph } = context;
-
-  // Resolve nome do idioma localmente
   const languageName = LANGUAGE_NAMES[language] || language;
-
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   let prompt = `
@@ -95,9 +83,8 @@ ${userPrompt}
 
 `;
 
-  // --- LÓGICA ANTI-DUPLICAÇÃO ---
   if (chunkIndex > 0 && lastParagraph) {
-    // Pegamos apenas as últimas 15 palavras para o gancho
+    // Usamos um contexto curto para evitar "gagueira"
     const words = lastParagraph.trim().split(/\s+/);
     const shortContext = words.slice(-20).join(" ");
 
@@ -123,7 +110,8 @@ A parte anterior terminou com: "...${shortContext}"
   return prompt;
 }
 
-// Funções auxiliares mantidas para compatibilidade
+// --- FUNÇÕES AUXILIARES RESTAURADAS PARA CORRIGIR ERROS DE IMPORTAÇÃO ---
+
 export function extractLastParagraph(text: string): string {
   if (!text) return "";
   const paras = text.split(/\n\n+/);
@@ -131,9 +119,49 @@ export function extractLastParagraph(text: string): string {
 }
 
 export function extractSemanticAnchors(text: string): string[] {
-  return []; // Simplificado para evitar erro
+  return [];
 }
 
 export function detectParagraphDuplication(text: string, prev: string): any {
   return { hasDuplication: false };
+}
+
+/**
+ * Sanitiza o script removendo metadados e tags de produção.
+ * Restaurada para satisfazer imports em chunkValidation.ts e promptInjector.ts
+ */
+export function sanitizeScript(text: string): string {
+  let sanitized = text;
+  // Remove tags [IMAGEM:...], [MÚSICA:...]
+  sanitized = sanitized.replace(
+    /\[(?:IMAGEM|IMAGEN|IMAGE|MÚSICA|MUSIC|SFX|CENA|SCENE|SOUND|IMG|FOTO|PHOTO|EFEITO|EFFECT)[:\s][^\]]*\]/gi,
+    "",
+  );
+  // Remove instruções de direção em maiúsculas
+  sanitized = sanitized.replace(/\[[A-Z][A-Z\s]{2,30}:[^\]]*\]/g, "");
+  // Limpeza de espaços
+  sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+  return sanitized.trim();
+}
+
+/**
+ * Gera prompt de emergência (Restaurada)
+ */
+export function buildEmergencyPrompt(userPrompt: string, context: MinimalChunkContext, duplicatedText: string): string {
+  return `
+ERRO: Você repetiu o texto anterior: "${duplicatedText.slice(0, 50)}...".
+CORREÇÃO: Escreva a continuação novamente, mas COMECE COM UMA NOVA FRASE.
+NÃO REPITA O CONTEXTO.
+  `;
+}
+
+/**
+ * Formata parágrafos para narração (Restaurada)
+ */
+export function formatParagraphsForNarration(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join("\n\n");
 }
