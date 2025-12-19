@@ -1,138 +1,67 @@
-import { sanitizeScript as baseSanitizeScript, formatParagraphsForNarration } from './promptInjector';
-
 /**
- * Limpa artefatos de IA e normaliza parágrafos para narração.
- * Foco: parte técnica, sem mudar sentido da história nem CTAs pedidos pelo usuário.
+ * Utilitários para limpeza e formatação de roteiros gerados por IA.
+ * Focado em remover alucinações, marcações de markdown e repetições (gagueira).
  */
-export function cleanFinalScript(raw: string): string {
-  if (!raw) return '';
 
-  // 1) Sanitizar metadados/tags técnicas e formatar para narração
-  let text = baseSanitizeScript(raw);
-  text = formatParagraphsForNarration(text);
+export function cleanScriptRepetitions(text: string): string {
+  if (!text) return "";
 
-  // 2) Limpar duplicações em nível de parágrafo e frase (genérico)
-  text = removeConsecutiveDuplicates(text);
-  text = removeSentenceLevelDuplicates(text);
+  let cleaned = text;
 
-  // 3) Limitar repetições globais de frases idênticas (ex.: CTAs duplicados em loop)
-  text = limitGlobalSentenceRepetitions(text, 3);
+  // 1. Remove repetição exata de frases longas (Gagueira de parágrafo)
+  // Ex: "Ele correu para a porta. Ele correu para a porta."
+  // O regex busca grupos de 15+ caracteres que se repetem com apenas espaços/pontuação entre eles.
+  const paragraphEchoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
+  cleaned = cleaned.replace(paragraphEchoRegex, "$1");
 
-  return text.trim();
+  // 2. Remove repetição de início de frase (Eco de continuidade)
+  // Ex: "...no final do dia. No final do dia, ele foi..."
+  // Remove a repetição se ela ocorrer logo no início do texto ou após pontuação
+  const startEchoRegex = /^([^\.!?]{10,})\s*\1/i;
+  cleaned = cleaned.replace(startEchoRegex, "$1");
+
+  // 3. Remove repetições de frases curtas consecutivas (3-4 palavras)
+  const shortPhraseRegex = /([A-Z][^.!?]+[.!?])\s*\1/g;
+  cleaned = cleaned.replace(shortPhraseRegex, "$1");
+
+  return cleaned;
 }
 
-/**
- * Normaliza texto para comparação neutra (case-insensitive, espaços/pontuação básicos).
- * NÃO mexe em significado, só facilita detectar duplicações técnicas.
- */
-function normalizeForComparison(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/["'“”‘’]/g, '') // remove aspas
-    .replace(/\s+/g, ' ') // normaliza espaços
-    .replace(/[.!?…]+$/g, '.') // normaliza pontuação final
+export function cleanFinalScript(text: string): string {
+  if (!text) return "";
+
+  let result = text;
+
+  // 1. Remove Artefatos de Markdown e Metadados
+  result = result
+    .replace(/\*\*/g, "") // Negrito
+    .replace(/\[.*?\]/g, "") // Tags como [Música], [Aplausos]
+    .replace(/^\s*[\-\*]\s+/gm, "") // Listas bullets no início da linha
+    .replace(/#{1,6}\s?/g, ""); // Cabeçalhos Markdown (#, ##)
+
+  // 2. Remove Títulos de Seções comuns que a IA gosta de colocar
+  const metaTitles = [
+    /^Título:.*$/im,
+    /^Roteiro:.*$/im,
+    /^Parte \d+.*$/im,
+    /^Cena \d+.*$/im,
+    /^Narrador:.*$/im,
+    /^Intro:.*$/im,
+    /^Outro:.*$/im,
+  ];
+
+  metaTitles.forEach((regex) => {
+    result = result.replace(regex, "");
+  });
+
+  // 3. Aplica a limpeza de repetições (O "Gaguejo")
+  result = cleanScriptRepetitions(result);
+
+  // 4. Normalização Final de Espaços
+  result = result
+    .replace(/\n{3,}/g, "\n\n") // Máximo 2 quebras de linha
+    .replace(/ {2,}/g, " ") // Máximo 1 espaço consecutivo
     .trim();
-}
 
-/**
- * Remove parágrafos consecutivos exatamente iguais (após normalização neutra).
- */
-export function removeConsecutiveDuplicates(text: string): string {
-  const paragraphs = text.split(/\n\n+/);
-  const cleaned: string[] = [];
-
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
-    if (!trimmed) continue;
-
-    const last = cleaned[cleaned.length - 1];
-    if (last && normalizeForComparison(last) === normalizeForComparison(trimmed)) {
-      // Pula duplicação óbvia (mesmo conteúdo técnico)
-      continue;
-    }
-
-    cleaned.push(trimmed);
-  }
-
-  return cleaned.join('\n\n');
-}
-
-/**
- * Remove duplicações de frases consecutivas dentro de cada parágrafo.
- */
-function removeSentenceLevelDuplicates(text: string): string {
-  const paragraphs = text.split(/\n\n+/);
-
-  const cleanedParas = paragraphs.map((p) => {
-    const sentences = p.split(/(?<=[\.!?…])\s+/);
-    const cleanedSentences: string[] = [];
-
-    for (const s of sentences) {
-      const trimmed = s.trim();
-      if (!trimmed) continue;
-
-      const last = cleanedSentences[cleanedSentences.length - 1];
-      if (last && normalizeForComparison(last) === normalizeForComparison(trimmed)) {
-        // Frase tecnicamente idêntica à anterior (ex.: CTA duplicado)
-        continue;
-      }
-
-      cleanedSentences.push(trimmed);
-    }
-
-    return cleanedSentences.join(' ');
-  });
-
-  return cleanedParas.join('\n\n');
-}
-
-/**
- * Limita globalmente o número de ocorrências de frases tecnicamente idênticas.
- * Ex.: "Commenta dando un voto da 0 a 10" não passa de 3 repetições no roteiro inteiro.
- */
-function limitGlobalSentenceRepetitions(text: string, maxOccurrences: number = 3): string {
-  if (maxOccurrences <= 0) return text;
-
-  const paragraphs = text.split(/\n\n+/);
-  const globalCounts = new Map<string, number>();
-
-  const cleanedParas = paragraphs.map((p) => {
-    const sentences = p.split(/(?<=[\.!?…])\s+/);
-    const kept: string[] = [];
-
-    for (const s of sentences) {
-      const trimmed = s.trim();
-      if (!trimmed) continue;
-
-      const key = normalizeForComparison(trimmed);
-      if (!key) continue;
-
-      const currentCount = globalCounts.get(key) ?? 0;
-      if (currentCount >= maxOccurrences) {
-        // Já atingiu o limite global de repetições para esta frase
-        continue;
-      }
-
-      globalCounts.set(key, currentCount + 1);
-      kept.push(trimmed);
-    }
-
-    return kept.join(' ');
-  });
-
-  return cleanedParas.join('\n\n');
-}
-
-/**
- * Validação técnica simples para diagnosticar problemas de desenvolvimento do roteiro.
- * 100% genérica: não olha conteúdo específico (CTA, frases, etc.).
- */
-export function validateScriptQuality(text: string, targetWords: number) {
-  const words = text.split(/\s+/).filter(Boolean).length;
-  const tooShort = targetWords > 0 && words < targetWords * 0.4; // < 40% da meta
-
-  return {
-    words,
-    tooShort,
-  };
+  return result;
 }
