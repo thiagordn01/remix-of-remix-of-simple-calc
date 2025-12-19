@@ -339,20 +339,23 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           location: agent.location || 'Brasil'
         });
 
-        const premiseWordTarget = 700;
-        addLog(jobId, `📊 Meta de palavras para premissa: ${premiseWordTarget}`);
+        const premiseWordTarget = 0; // Sem meta rígida de palavras para premissa (controle 100% via prompt)
+        addLog(jobId, premiseWordTarget
+          ? `📊 Meta de palavras para premissa (opcional): ${premiseWordTarget}`
+          : '📊 Premissa sem meta rígida de palavras (modelo igual ao sistema de referência)'
+        );
 
         // Gerar premissa usando o provider correto
         const premiseResult = job.provider === 'deepseek'
           ? await puterDeepseekService.generatePremise(
               premisePrompt,
-              premiseWordTarget,
+              premiseWordTarget || undefined,
               onProgress
             )
           : await enhancedGeminiService.generatePremise(
               premisePrompt,
               availableApisForJob,
-              premiseWordTarget,
+              premiseWordTarget || undefined,
               onProgress
             );
 
