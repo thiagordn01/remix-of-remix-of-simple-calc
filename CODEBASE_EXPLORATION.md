@@ -680,6 +680,16 @@ Errors classified as non-recoverable (block permanently):
 ✅ Automatic recovery strategies  
 ✅ Clear progress tracking and user feedback  
 
+### Simple vs Parallel Generators (Conceptual Equivalence)
+
+- **Gerador simples:** `ScriptGenerator` + `useScriptGenerator` → sempre gera **um roteiro por vez**.  
+- **Gerador paralelo:** `ScriptGeneratorWithModals` + `useParallelScriptGenerator` → suporta fila de jobs e controle de `concurrentLimit`.  
+- O `concurrentLimit` do gerador paralelo é **1 por padrão** (salvo em `localStorage`),
+  o que torna o modo padrão conceitualmente equivalente ao gerador simples em termos de concorrência
+  (apenas um job ativo de cada vez).
+- A principal diferença é operacional: o gerador paralelo gerencia **múltiplos jobs na fila**,
+  enquanto o gerador simples é focado em fluxo único interativo.
+
 ### Potential Issues
 ⚠️ REQUESTS_PER_MINUTE_LIMIT and REQUESTS_PER_DAY_LIMIT referenced but not explicitly defined (hardcoded as 2 and 50)  
 ⚠️ localStorage depends on browser - cleared on cache  
