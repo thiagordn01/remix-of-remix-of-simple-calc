@@ -153,13 +153,8 @@ ${userPrompt}`;
 }
 
 /**
- * ✅ VERSÃO 2.0 - Geração de premissa com SEÇÕES NUMERADAS
- *
- * Esta é a CHAVE para evitar duplicação:
- * - A premissa é dividida em seções numeradas (SEÇÃO 1, SEÇÃO 2, etc.)
- * - Cada chunk do roteiro gera APENAS uma seção específica
- * - Não há "continuação" - cada seção é independente
- * - Isso elimina completamente o problema de duplicação
+ * Geração de premissa com foco técnico mínimo.
+ * O conteúdo (CTAs, tom, estrutura) vem 100% do prompt do usuário.
  */
 export function injectPremiseContext(
   userPrompt: string,
@@ -168,90 +163,22 @@ export function injectPremiseContext(
 ): string {
   const languageEnforcement = buildLanguageEnforcementBlock(context.language, context.language);
 
-  // Calcular número de seções baseado na duração
-  const sections = numberOfSections || Math.max(3, Math.ceil(context.duration / 3));
+  const targetWords = (context.duration || 10) * 150;
 
   const contextBlock = `
 ${languageEnforcement}
 
-📌 TÍTULO: "${context.title}"
-📊 DURAÇÃO: ${context.duration} minutos (~${context.duration * 150} palavras)
-🌍 IDIOMA: ${context.language}
-📍 PÚBLICO: ${context.location}
-${context.channelName ? `📺 CANAL: ${context.channelName}` : ''}
+TÍTULO: "${context.title}"
+CANAL: ${context.channelName || 'Canal'}
+DURAÇÃO ALVO: ${context.duration} minutos (~${targetWords} palavras)
+IDIOMA: ${context.language}
+PÚBLICO/LOCAL: ${context.location}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 SUA TAREFA: CRIAR PREMISSA COM CONTEXTO GLOBAL + ${sections} SEÇÕES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ FORMATO OBRIGATÓRIO - USE EXATAMENTE ESTA ESTRUTURA:
-
-[CONTEXTO GLOBAL]
-• Personagens principais: (liste TODOS os nomes dos personagens com descrição breve)
-• Lugares: (liste TODOS os nomes de lugares/locais mencionados)
-• Período/Época: (quando a história se passa)
-• Resumo da trama: (2-3 frases resumindo a história completa)
-
-🚨 CRÍTICO: Os nomes definidos aqui DEVEM ser usados EXATAMENTE iguais em TODAS as seções!
-Se o protagonista se chama "João", ele NUNCA pode ser chamado de "José" ou "Pedro" depois.
-Se a fazenda se chama "Santa Rita", ela NUNCA pode virar "São Miguel" ou outro nome.
-
-[SEÇÃO 1 - ABERTURA E GANCHO]
-(Descrição detalhada do que acontece nesta seção: gancho inicial,
-apresentação do tema, primeira conexão com o espectador)
-
-[SEÇÃO 2 - DESENVOLVIMENTO INICIAL]
-(Descrição detalhada: primeiros pontos principais, contexto,
-estabelecimento do conflito/problema/curiosidade)
-
-[SEÇÃO 3 - DESENVOLVIMENTO CENTRAL]
-(Descrição detalhada: aprofundamento, exemplos, revelações,
-momentos de tensão ou descoberta)
-
-... (continue para todas as ${sections} seções)
-
-[SEÇÃO ${sections} - CONCLUSÃO E CALL-TO-ACTION]
-(Descrição detalhada: resolução, reflexão final, mensagem principal,
-convite para ação - like, comentário, inscrição)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 DIRETRIZES DO CRIADOR (use como inspiração, NÃO copie literalmente):
-
+INSTRUÇÕES DO CRIADOR (siga À RISCA):
 ${userPrompt}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🚨 REGRAS CRÍTICAS PARA A PREMISSA:
-
-1. DEVE ter EXATAMENTE ${sections} seções numeradas
-2. Cada seção DEVE ser AUTÔNOMA e COMPLETA em si mesma
-3. Use o formato [SEÇÃO N - TÍTULO] para cada seção
-4. Cada seção deve ter ~${Math.round((context.duration * 150) / sections)} palavras quando expandida
-5. NÃO copie exemplos literalmente das diretrizes
-6. As seções devem fluir logicamente MAS podem ser lidas independentemente
-7. FOQUE em retenção: cada seção deve ter um "gancho" para a próxima
-
-✅ EXEMPLO DE ESTRUTURA CORRETA:
-
-[SEÇÃO 1 - ABERTURA E GANCHO]
-Iniciar com questionamento provocativo sobre o tema central.
-Apresentar estatística surpreendente ou fato pouco conhecido.
-Criar tensão: "o que você não sabe pode estar prejudicando você".
-Prometer revelação que mudará a perspectiva do espectador.
-
-[SEÇÃO 2 - CONTEXTO E PROBLEMA]
-Explicar o cenário atual e por que isso importa.
-Mostrar como a maioria das pessoas está errada sobre o assunto.
-Introduzir o conflito ou problema central.
-Gerar identificação: "você provavelmente já passou por isso".
-
-(E assim por diante...)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-  return contextBlock;
+  return contextBlock.trim();
 }
 
 /**
