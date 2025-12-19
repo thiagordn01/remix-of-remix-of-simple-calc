@@ -18,6 +18,7 @@ import {
   buildEmergencyPrompt,
   formatParagraphsForNarration
 } from '@/utils/promptInjector';
+import { validateScriptQuality, cleanFinalScript } from '@/utils/scriptCleanup';
 import { validateChunk, findNaturalCutPoint } from '@/utils/chunkValidation';
 
 // ✅ FLAG PARA A/B TESTING: Sistema "Prompt Invisível" vs Sistema Antigo
@@ -966,39 +967,40 @@ REGRAS:
           script = sanitizeScript(script);
         }
 
-        scriptWordCount = script.split(/\s+/).length;
-      }
-      
-      const totalWordCount = scriptWordCount;
-      
-      addLog(jobId, `✅ Roteiro completo gerado: ${scriptWordCount} palavras`);
-      addLog(jobId, `⏱️ Duração estimada: ~${Math.ceil(scriptWordCount / 150)} minutos`);
+        // Aplicar limpeza COMPLETA apenas sobre o roteiro final concatenado
+        const cleanedFullScript = cleanFinalScript(script);
+        const totalWordCount = cleanedFullScript.split(/\s+/).filter(Boolean).length;
 
-      // Capturar estatísticas das APIs para diagnóstico
-      const apiStats = enhancedGeminiService.getApiStats();
+        addLog(jobId, `✅ Roteiro completo gerado: ${totalWordCount} palavras`);
+        addLog(jobId, `⏱️ Duração estimada: ~${Math.ceil(totalWordCount / 150)} minutos`);
 
-      // Finalizar job
-      // ✅ CORRIGIDO: Usar função helper para liberar APIs de forma consistente
-      const finalJob = jobsRef.current.find(j => j.id === jobId);
-      const totalApisUsed = finalJob?.usedApiIds?.length || 0;
-      addLog(jobId, `📊 Total de APIs diferentes usadas neste job: ${totalApisUsed}/${activeApis.length}`);
+        // Capturar estatísticas das APIs para diagnóstico
+        const apiStats = enhancedGeminiService.getApiStats();
 
-      const releasedCount = releaseJobApisFromGlobalPool(jobId);
-      if (releasedCount > 0) {
-        addLog(jobId, `🔓 ${releasedCount} APIs liberadas para outros jobs`);
-      }
+        // Finalizar job
+        // ✅ CORRIGIDO: Usar função helper para liberar APIs de forma consistente
+        const finalJob = jobsRef.current.find(j => j.id === jobId);
+        const totalApisUsed = finalJob?.usedApiIds?.length || 0;
+        addLog(jobId, `📊 Total de APIs diferentes usadas neste job: ${totalApisUsed}/${activeApis.length}`);
 
-      updateJob(jobId, {
-        status: 'completed',
-        script,
-        wordCount: totalWordCount,
-        progress: 100,
-        endTime: new Date(),
-        apiStats
-      });
+        const releasedCount = releaseJobApisFromGlobalPool(jobId);
+        if (releasedCount > 0) {
+          addLog(jobId, `🔓 ${releasedCount} APIs liberadas para outros jobs`);
+        }
 
-      const totalTime = Math.round((new Date().getTime() - job.startTime.getTime()) / 1000);
-      addLog(jobId, `🎉 Geração concluída com sucesso em ${totalTime}s!`);
+        updateJob(jobId, {
+          status: 'completed',
+          script: cleanedFullScript,
+          wordCount: totalWordCount,
+          progress: 100,
+          endTime: new Date(),
+          apiStats
+        });
+
+        const totalTime = Math.round((new Date().getTime() - job.startTime.getTime()) / 1000);
+        addLog(jobId, `🎉 Geração concluída com sucesso em ${totalTime}s!`);
+
+    }
 
     } catch (error) {
       // ✅ MELHOR extração de mensagem de erro com contexto

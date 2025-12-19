@@ -246,8 +246,8 @@ export const useScriptGenerator = () => {
               (message) => console.log(`Roteiro parte ${i + 1} (Gemini):`, message)
             );
 
-        // Limpeza técnica pós-geração (metadados, duplicações locais, CTAs em eco)
-        const cleanedChunk = cleanFinalScript(chunkResult.content);
+        // Limpeza técnica leve por chunk (metadados e formatação básica)
+        const cleanedChunk = sanitizeScript(chunkResult.content);
         const chunkWordCount = cleanedChunk.split(/\s+/).length;
 
         console.log(`\n═══════════════════════════════════════════════════`);
@@ -255,7 +255,7 @@ export const useScriptGenerator = () => {
         console.log(`📊 Palavras: ${chunkWordCount}`);
         console.log(`═══════════════════════════════════════════════════\n`);
 
-        // Concatenar ao roteiro
+        // Concatenar ao roteiro bruto
         scriptContent += (scriptContent ? '\n\n' : '') + cleanedChunk;
 
         // Atualizar progresso
@@ -281,18 +281,31 @@ export const useScriptGenerator = () => {
         scriptChunks.push(scriptChunk);
       }
 
-      const script = scriptChunks.map(chunk => chunk.content);
-      const totalWords = scriptChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
+      // Aplicar limpeza COMPLETA apenas sobre o roteiro final concatenado
+      const joinedScript = scriptChunks.map(chunk => chunk.content).join('\n\n');
+      const cleanedFullScript = cleanFinalScript(joinedScript);
+      const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
+
+      const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
+        id: crypto.randomUUID(),
+        content,
+        wordCount: content.split(/\s+/).filter(Boolean).length,
+        chunkIndex: index,
+        isComplete: true,
+      }));
+
+      const script = normalizedChunks.map(chunk => chunk.content);
+      const totalWords = normalizedChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
       const estimatedDuration = totalWords / 170;
 
       // Diagnóstico técnico simples da qualidade final
-      const quality = validateScriptQuality(script.join('\n\n'), targetWords);
+      const quality = validateScriptQuality(cleanedFullScript, targetWords);
       console.log('📊 Qualidade técnica do roteiro:', quality);
 
       const finalResult: ScriptGenerationResult = {
         premise,
         script,
-        chunks: scriptChunks,
+        chunks: normalizedChunks,
         totalWords,
         estimatedDuration,
         agentUsed: agent?.name
@@ -301,8 +314,8 @@ export const useScriptGenerator = () => {
       setResult(finalResult);
       setProgress({
         stage: 'script',
-        currentChunk: scriptChunks.length,
-        totalChunks: scriptChunks.length,
+        currentChunk: normalizedChunks.length,
+        totalChunks: normalizedChunks.length,
         completedWords: targetWords,
         targetWords: targetWords,
         isComplete: true,
