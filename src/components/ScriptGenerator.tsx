@@ -16,6 +16,7 @@ import { useAgents } from '@/hooks/useAgents';
 import { useGeminiKeys } from '@/hooks/useGeminiKeys';
 import { useScriptGenerator } from '@/hooks/useScriptGenerator';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { AgentManager } from './AgentManager';
 import { GeminiApiManager } from './GeminiApiManager';
 import { DeepseekApiManager } from './DeepseekApiManager';
@@ -29,6 +30,8 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
   const { apiKeys, getActiveApiKeys } = useGeminiKeys();
   const { generateScript, isGenerating, progress, result, clearResult } = useScriptGenerator();
   const { toast } = useToast();
+  const { isMaster } = useAuth();
+  const isAdmin = !!isMaster;
 
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini');
@@ -52,9 +55,10 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
 
   const selectedAgent = selectedAgentId ? getAgent(selectedAgentId) : null;
   const activeGeminiKeys = getActiveApiKeys();
+  const effectiveProvider: AIProvider = isAdmin ? selectedProvider : 'gemini';
 
   // Verificar se o provider atual pode ser usado
-  const canGenerate = selectedProvider === 'gemini'
+  const canGenerate = effectiveProvider === 'gemini'
     ? activeGeminiKeys.length > 0
     : isPuterReady;
 
@@ -93,8 +97,20 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
       return;
     }
 
-    // Verificar disponibilidade baseado no provider
-    if (selectedProvider === 'gemini' && activeGeminiKeys.length === 0) {
+    const effectiveProvider: AIProvider = isAdmin ? selectedProvider : 'gemini';
+
+    // Bloqueio extra de seguranca: nao permitir DeepSeek para nao-admins
+    if (!isAdmin && selectedProvider === 'deepseek') {
+      toast({
+        title: "Acesso restrito",
+        description: "A geração via DeepSeek/Puter está disponível apenas para administradores.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Verificar disponibilidade baseado no provider efetivo
+    if (effectiveProvider === 'gemini' && activeGeminiKeys.length === 0) {
       toast({
         title: "Nenhuma API Gemini ativa",
         description: "Configure pelo menos uma API key do Gemini na aba 'APIs'.",
@@ -103,7 +119,7 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
       return;
     }
 
-    if (selectedProvider === 'deepseek') {
+    if (effectiveProvider === 'deepseek') {
       if (!puterDeepseekService.isAvailable()) {
         toast({
           title: "Puter.js nao disponivel",
@@ -127,7 +143,7 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
     }
 
     try {
-      const result = await generateScript(request, selectedAgent, apiKeys, selectedProvider);
+      const result = await generateScript(request, selectedAgent, apiKeys, effectiveProvider);
       
       toast({
         title: "Roteiro gerado com sucesso!",
@@ -336,9 +352,9 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     type="button"
-                    variant={selectedProvider === 'gemini' ? 'default' : 'outline'}
+                    variant={effectiveProvider === 'gemini' ? 'default' : 'outline'}
                     onClick={() => setSelectedProvider('gemini')}
-                    className={selectedProvider === 'gemini'
+                    className={effectiveProvider === 'gemini'
                       ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white'
                       : ''
                     }
@@ -349,21 +365,23 @@ export const ScriptGenerator = ({ onScriptGenerated }: ScriptGeneratorProps) => 
                       {activeGeminiKeys.length}
                     </Badge>
                   </Button>
-                  <Button
-                    type="button"
-                    variant={selectedProvider === 'deepseek' ? 'default' : 'outline'}
-                    onClick={() => setSelectedProvider('deepseek')}
-                    className={selectedProvider === 'deepseek'
-                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white'
-                      : ''
-                    }
-                  >
-                    <span className="mr-2">D</span>
-                    DeepSeek
-                    <Badge variant="outline" className={`ml-2 text-xs ${isPuterReady ? 'bg-green-100 text-green-800' : ''}`}>
-                      {isPuterReady ? '✓' : '?'}
-                    </Badge>
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      variant={effectiveProvider === 'deepseek' ? 'default' : 'outline'}
+                      onClick={() => setSelectedProvider('deepseek')}
+                      className={effectiveProvider === 'deepseek'
+                        ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white'
+                        : ''
+                      }
+                    >
+                      <span className="mr-2">D</span>
+                      DeepSeek
+                      <Badge variant="outline" className={`ml-2 text-xs ${isPuterReady ? 'bg-green-100 text-green-800' : ''}`}>
+                        {isPuterReady ? '✓' : '?'}
+                      </Badge>
+                    </Button>
+                  )}
                 </div>
               </div>
 
