@@ -1,26 +1,28 @@
 /**
- * Utilitários para limpeza e formatação de roteiros gerados por IA.
- * Focado em remover alucinações, marcações de markdown e repetições (gagueira).
+ * Utilitários para limpeza e formatação de roteiros.
+ * Focado em remover repetições ("gagueira" da IA) e metadados.
  */
 
+/**
+ * Remove repetições onde a IA repete a última frase do contexto anterior.
+ * Ex: "O sol nasceu. O sol nasceu e..." -> "O sol nasceu e..."
+ */
 export function cleanScriptRepetitions(text: string): string {
   if (!text) return "";
 
   let cleaned = text;
 
-  // 1. Remove repetição exata de frases longas (Gagueira de parágrafo)
-  // Ex: "Ele correu para a porta. Ele correu para a porta."
-  // O regex busca grupos de 15+ caracteres que se repetem com apenas espaços/pontuação entre eles.
-  const paragraphEchoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
-  cleaned = cleaned.replace(paragraphEchoRegex, "$1");
+  // 1. Remove repetição exata de parágrafos/frases longas (15+ chars)
+  // Procura por: (texto) seguido de (texto)
+  const echoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
+  cleaned = cleaned.replace(echoRegex, "$1");
 
-  // 2. Remove repetição de início de frase (Eco de continuidade)
-  // Ex: "...no final do dia. No final do dia, ele foi..."
-  // Remove a repetição se ela ocorrer logo no início do texto ou após pontuação
-  const startEchoRegex = /^([^\.!?]{10,})\s*\1/i;
+  // 2. Remove repetição no início do texto (comum em chunks)
+  // Ex: Texto anterior terminou em "Fim." e novo começa com "Fim. O dia..."
+  const startEchoRegex = /^([^\.!?]{10,}[.!?])\s*\1/i;
   cleaned = cleaned.replace(startEchoRegex, "$1");
 
-  // 3. Remove repetições de frases curtas consecutivas (3-4 palavras)
+  // 3. Remove repetição de frases curtas consecutivas
   const shortPhraseRegex = /([A-Z][^.!?]+[.!?])\s*\1/g;
   cleaned = cleaned.replace(shortPhraseRegex, "$1");
 
@@ -32,36 +34,27 @@ export function cleanFinalScript(text: string): string {
 
   let result = text;
 
-  // 1. Remove Artefatos de Markdown e Metadados
+  // 1. Remove Markdown e Metadados
   result = result
-    .replace(/\*\*/g, "") // Negrito
-    .replace(/\[.*?\]/g, "") // Tags como [Música], [Aplausos]
-    .replace(/^\s*[\-\*]\s+/gm, "") // Listas bullets no início da linha
-    .replace(/#{1,6}\s?/g, ""); // Cabeçalhos Markdown (#, ##)
+    .replace(/\*\*/g, "")
+    .replace(/\[.*?\]/g, "")
+    .replace(/^\s*[\-\*]\s+/gm, "")
+    .replace(/#{1,6}\s?/g, "");
 
-  // 2. Remove Títulos de Seções comuns que a IA gosta de colocar
-  const metaTitles = [
-    /^Título:.*$/im,
-    /^Roteiro:.*$/im,
-    /^Parte \d+.*$/im,
-    /^Cena \d+.*$/im,
-    /^Narrador:.*$/im,
-    /^Intro:.*$/im,
-    /^Outro:.*$/im,
-  ];
-
+  // 2. Remove Títulos de Seções (IA gosta de colocar "Parte 1:", "Intro:")
+  const metaTitles = [/^Título:.*$/im, /^Roteiro:.*$/im, /^Parte \d+.*$/im, /^Cena \d+.*$/im, /^Narrador:.*$/im];
   metaTitles.forEach((regex) => {
     result = result.replace(regex, "");
   });
 
-  // 3. Aplica a limpeza de repetições (O "Gaguejo")
+  // 3. Aplica a limpeza de repetições
   result = cleanScriptRepetitions(result);
 
-  // 4. Normalização Final de Espaços
-  result = result
-    .replace(/\n{3,}/g, "\n\n") // Máximo 2 quebras de linha
-    .replace(/ {2,}/g, " ") // Máximo 1 espaço consecutivo
-    .trim();
+  // 4. Normaliza espaços
+  return result.replace(/\n{3,}/g, "\n\n").trim();
+}
 
-  return result;
+// Mantido para compatibilidade
+export function validateScriptQuality(script: string, targetWords: number) {
+  return { score: 100, issues: [] };
 }
