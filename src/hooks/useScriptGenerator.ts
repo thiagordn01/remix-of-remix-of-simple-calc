@@ -10,22 +10,22 @@ import {
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
-import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from "@/utils/promptInjector";
-// ✅ IMPORTADO cleanScriptRepetitions
+// ✅ Agora importamos sanitizeScript daqui para evitar erros de duplicidade
+import {
+  injectPremiseContext,
+  buildMinimalChunkPrompt,
+  extractLastParagraph,
+  sanitizeScript,
+} from "@/utils/promptInjector"; // Nota: O promptInjector reexporta do minimalPromptBuilder, ou importamos direto do minimalPromptBuilder se preferir.
+// Se promptInjector não reexportar, mude para:
+// import { buildMinimalChunkPrompt, extractLastParagraph, sanitizeScript } from '@/utils/minimalPromptBuilder';
+// Mas vou assumir que você quer manter o padrão atual. Vamos importar direto do utils onde definimos agora:
 import { cleanFinalScript, validateScriptQuality, cleanScriptRepetitions } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
 
-function sanitizeScript(text: string): string {
-  let sanitized = text;
-  sanitized = sanitized.replace(
-    /\[(?:IMAGEM|IMAGEN|IMAGE|MÚSICA|MUSIC|SFX|CENA|SCENE|SOUND|IMG|FOTO|PHOTO|EFEITO|EFFECT)[:\s][^\]]*\]/gi,
-    "",
-  );
-  sanitized = sanitized.replace(/\[[A-Z][A-Z\s]{2,30}:[^\]]*\]/g, "");
-  sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
-  sanitized = sanitized.replace(/^\s*\n/, "");
-  return sanitized.trim();
-}
+// NOTA: Para garantir que funcione independente de como promptInjector está configurado,
+// vamos importar o sanitizeScript que acabamos de criar no minimalPromptBuilder
+import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
 
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -133,7 +133,6 @@ export const useScriptGenerator = () => {
             message: `Gerando parte ${i + 1}/${numberOfChunks}...`,
           });
 
-          // Extrai contexto LIMPO
           const lastParagraph = scriptContent ? extractLastParagraph(scriptContent) : "";
 
           const chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
@@ -167,9 +166,9 @@ export const useScriptGenerator = () => {
                   console.log,
                 );
 
-          // ✅ LIMPEZA CRÍTICA AQUI
-          let cleanedChunk = sanitizeScript(chunkResult.content);
-          // Remove duplicatas imediatas (Efeito Eco)
+          // ✅ LIMPEZA DE REPETIÇÕES E TAGS
+          // Usamos a função importada agora
+          let cleanedChunk = sanitizeScriptUtils(chunkResult.content);
           cleanedChunk = cleanScriptRepetitions(cleanedChunk);
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
