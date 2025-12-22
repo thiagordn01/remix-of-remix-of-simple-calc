@@ -114,9 +114,10 @@ export const useScriptGenerator = () => {
         let storyFinished = false;
 
         // 3. LOOP DE GERAÇÃO COM VALIDAÇÃO (NOVA LÓGICA)
-        const SIMPLE_THRESHOLD_WORDS = 1800;
+        const MAX_SIMPLE_DURATION_MINUTES = 60;
+        const useAdvancedMode = config.duration > MAX_SIMPLE_DURATION_MINUTES;
 
-        if (targetWordsTotal > SIMPLE_THRESHOLD_WORDS) {
+        if (useAdvancedMode) {
           // ==========================
           // MODO AVANÇADO (JSON + coherence_notes)
           // ==========================
@@ -263,49 +264,85 @@ export const useScriptGenerator = () => {
           }
         } else {
           // ==========================
-          // MODO SIMPLES (inspirado no sistema de referência)
-          // - Divide o roteiro em partes internas, mas sem JSON/coherence_notes
-          // - Usa apenas texto livre e contexto acumulado como se fosse um único chat
+          // MODO SIMPLES (CLONE DO SISTEMA EM CHAT ÚNICO COM PARTES INTERNAS)
+          // - Divide o roteiro em partes internas de ~10 minutos
+          // - Mantém um "chat" lógico único via contexto acumulado
+          // - Sem JSON / coherence_notes, apenas texto livre validado no final
           // ==========================
 
+          // Parâmetros espelhando o outro sistema
+          const wpm = 170; // palavras por minuto para corrigir baixa contagem de caracteres
           const minutesPerPart = 10; // ~10 minutos por parte
           const totalParts = Math.max(1, Math.ceil(config.duration / minutesPerPart));
-          const wordsPerPart = Math.max(300, Math.ceil(targetWordsTotal / totalParts));
+          const totalWordsTarget = config.duration * wpm;
+          const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
           for (let i = 0; i < totalParts; i++) {
+            const partNumber = i + 1;
+
             setProgress({
               stage: "script",
-              currentChunk: i + 1,
+              currentChunk: partNumber,
               totalChunks: totalParts,
               completedWords: scriptContentFull.split(/\s+/).length,
-              targetWords: targetWordsTotal,
+              targetWords: totalWordsTarget,
               isComplete: false,
               percentage: 10 + (i / totalParts) * 80,
               message:
                 i === 0
-                  ? `Escrevendo a primeira parte (${i + 1}/${totalParts}) do roteiro em modo simples...`
-                  : `Continuando a história (parte ${i + 1}/${totalParts}) em modo simples...`,
+                  ? `Escrevendo a primeira parte (${partNumber}/${totalParts}) do roteiro em modo simples (chat único)...`
+                  : `Continuando a história (parte ${partNumber}/${totalParts}) em modo simples (chat único)...`,
             });
+
+            // ESTRUTURA INTERNA MENTAL (copiada do generateSingleScript)
+            let structureInstruction = "";
+            if (partNumber === 1) {
+              structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
+            1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
+            2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
+            3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
+            `;
+            } else if (partNumber === totalParts) {
+              structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+            1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
+            2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
+            3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
+            `;
+            } else {
+              structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+            1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
+            2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
+            3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
+            `;
+            }
 
             // Prompt simples com contexto acumulado
             let partPrompt = `${config.scriptPrompt}\n\n`;
 
             if (i === 0) {
-              partPrompt += `Você vai escrever um roteiro completo e contínuo para o vídeo com título "${request.title}".\n`;
-              partPrompt += `Use a premissa abaixo como base absoluta da história, sem repetir o texto da premissa palavra por palavra:\n\n`;
-              partPrompt += `${premise}\n\n`;
-              partPrompt += `Escreva a PARTE 1 de ${totalParts}, com cerca de ${wordsPerPart} palavras.\n`;
-              partPrompt += `Escreva em formato de narrativa contínua, sem cabeçalhos, sem tópicos e sem Markdown.\n`;
-              partPrompt += `Foque em cenas detalhadas e imersivas, "câmera lenta", mostrando ações, sensações e pensamentos.\n`;
+              // Primeira parte: inclui premissa aprovada e título, exatamente como no outro sistema
+              partPrompt += `CONTEXTO (PREMISSA APROVADA):\n${premise}\n\n`;
+              partPrompt += `TÍTULO: ${request.title}\n\n`;
             } else {
+              // Partes seguintes: enviamos tudo que já foi escrito para simular o mesmo chat com memória natural
               partPrompt += `Aqui está TUDO o que você já escreveu até agora do roteiro (NÃO repita nada disso, apenas continue):\n\n`;
               partPrompt += `${scriptContentFull}\n\n`;
-              partPrompt += `Agora continue a história exatamente do ponto onde parou.\n`;
-              partPrompt += `Escreva a PARTE ${i + 1} de ${totalParts}, com cerca de ${wordsPerPart} palavras.\n`;
-              if (i === totalParts - 1) {
-                partPrompt += `Esta é a parte FINAL. Feche todos os arcos, entregue um final emocionalmente forte e NÃO deixe ganchos abertos.\n`;
-              }
-              partPrompt += `Não faça recapitulações longas, não resuma o que já aconteceu. Apenas avance a narrativa em câmera lenta.\n`;
+              partPrompt += `Agora continue a história exatamente do ponto onde parou.\n\n`;
+            }
+
+            partPrompt += `ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.\n\n`;
+            partPrompt += `META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.\n\n`;
+            partPrompt += `${structureInstruction}\n\n`;
+            partPrompt += `INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}\n\n`;
+            partPrompt += `LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.\n`;
+            if (i === totalParts - 1) {
+              partPrompt += `Esta é a parte FINAL. Feche todos os arcos, entregue um final emocionalmente forte e NÃO deixe ganchos abertos.\n`;
             }
 
             partPrompt += `\nRegras gerais IMPORTANTES:\n`;
@@ -331,7 +368,7 @@ export const useScriptGenerator = () => {
 
             const rawPart = sanitizeScript(partResult.content || "").trim();
             if (!rawPart) {
-              console.warn(`Parte ${i + 1}/${totalParts} veio vazia no modo simples.`);
+              console.warn(`Parte ${partNumber}/${totalParts} veio vazia no modo simples.`);
               continue;
             }
 
