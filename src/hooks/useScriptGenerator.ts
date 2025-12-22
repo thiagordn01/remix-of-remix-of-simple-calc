@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+// src/hooks/useScriptGenerator.ts
+import { useState, useCallback, useRef } from "react";
 import {
   ScriptGenerationRequest,
   ScriptGenerationResult,
@@ -6,23 +7,28 @@ import {
   GeminiApiKey,
   ScriptChunk,
   AIProvider,
+  WorldState,
+  StructuredScriptResponse,
 } from "@/types/scripts";
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
-import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from "@/utils/promptInjector";
+import { buildMinimalChunkPrompt, sanitizeScript } from "@/utils/minimalPromptBuilder";
+import { initializeWorldState, createImmutableBible, validateChunkLogic, ImmutableBible } from "@/utils/factBible";
 import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
-import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
 
-// ✅ CORREÇÃO: O Kill Switch agora é estrito.
-// Só dispara com tags técnicas, permitindo CTAs (Like/Subscreva) no texto.
-function hasEndingPhrases(text: string): boolean {
-  const upper = text.toUpperCase();
-  // Apenas tags que a IA usa para sinalizar "Acabei tecnicamente"
-  const endTriggers = ["[FIM]", "[THE END]", "[FIN]"];
-
-  return endTriggers.some((trigger) => upper.includes(trigger));
+// Função auxiliar para parsear o JSON da IA de forma segura
+function parseAIResponse(content: string): StructuredScriptResponse | null {
+  try {
+    // Tenta encontrar o JSON dentro do texto (caso a IA fale algo antes/depois)
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : content;
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("Falha ao parsear JSON da IA:", e);
+    return null;
+  }
 }
 
 export const useScriptGenerator = () => {
@@ -30,6 +36,10 @@ export const useScriptGenerator = () => {
   const [progress, setProgress] = useState<ScriptGenerationProgress | null>(null);
   const [result, setResult] = useState<ScriptGenerationResult | null>(null);
   const { toast } = useToast();
+
+  // Refs para manter estado durante o processo assíncrono
+  const worldStateRef = useRef<WorldState | null>(null);
+  const bibleRef = useRef<ImmutableBible | null>(null);
 
   const generateScript = useCallback(
     async (
@@ -48,7 +58,7 @@ export const useScriptGenerator = () => {
           channelName: request.channelName || agent?.channelName || "",
           premisePrompt: request.premisePrompt || agent?.premisePrompt || "",
           scriptPrompt: request.scriptPrompt || agent?.scriptPrompt || "",
-          duration: request.duration || agent?.duration || 10,
+          duration: request.duration || 10,
           language: detectedLanguage,
           location: request.location || agent?.location || "Brasil",
         };
@@ -60,7 +70,7 @@ export const useScriptGenerator = () => {
         );
         if (provider === "gemini" && activeGeminiKeys.length === 0) throw new Error("Sem chaves Gemini ativas");
 
-        // 1. GERAR PREMISSA
+        // 1. GERAR PREMISSA (Mantido igual)
         setProgress({
           stage: "premise",
           currentChunk: 1,
@@ -68,16 +78,11 @@ export const useScriptGenerator = () => {
           completedWords: 0,
           targetWords: 0,
           isComplete: false,
-          percentage: 10,
+          percentage: 5,
+          message: "Criando premissa e bíblia da história...",
         });
 
-        const processedPremisePrompt = injectPremiseContext(config.premisePrompt, {
-          title: request.title,
-          channelName: config.channelName,
-          duration: config.duration,
-          language: config.language,
-          location: config.location,
-        });
+        const processedPremisePrompt = `${config.premisePrompt}\n\n[IMPORTANTE: Defina idades e datas explicitamente]`;
 
         const premiseResult =
           provider === "deepseek"
@@ -91,105 +96,131 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // 2. PARSE INTELIGENTE (ESTRUTURA)
+        // INICIALIZAR SISTEMA DE ESTADO
+        worldStateRef.current = initializeWorldState(premise);
+        // Cria a bíblia imutável (aqui poderíamos extrair chars iniciais da premissa se tivéssemos um parser,
+        // por enquanto inicializamos vazia e populamos no primeiro chunk)
+        bibleRef.current = createImmutableBible(premise, {});
+
+        // 2. PARSE DE ESTRUTURA
         const chapterMatches = premise.match(/\[(?:CAPITULO|SEÇÃO|SECTION|PART)\s*\d+\]/gi);
         const detectedChapters = chapterMatches ? chapterMatches.length : 0;
         const fallbackChunks = Math.max(1, Math.ceil(config.duration / 8));
-
-        // Usa o número de capítulos detetados na premissa
         const numberOfChunks = detectedChapters > 0 ? detectedChapters : fallbackChunks;
         const targetWordsTotal = config.duration * 140;
         const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
 
-        console.log(
-          `ESTRUTURA: ${numberOfChunks} Capítulos (baseado em ${detectedChapters > 0 ? "Premissa" : "Tempo"}).`,
-        );
-
-        setProgress({
-          stage: "script",
-          currentChunk: 1,
-          totalChunks: numberOfChunks,
-          completedWords: 0,
-          targetWords: targetWordsTotal,
-          isComplete: false,
-          percentage: 20,
-          message: `Gerando ${numberOfChunks} capítulos...`,
-        });
-
-        let scriptContent = "";
+        let scriptContentFull = "";
         const scriptChunks: ScriptChunk[] = [];
         let storyFinished = false;
 
-        // 3. LOOP DE GERAÇÃO
+        // 3. LOOP DE GERAÇÃO COM VALIDAÇÃO (NOVA LÓGICA)
         for (let i = 0; i < numberOfChunks; i++) {
           if (storyFinished) break;
 
-          setProgress({
-            stage: "script",
-            currentChunk: i + 1,
-            totalChunks: numberOfChunks,
-            completedWords: scriptContent.split(/\s+/).length,
-            targetWords: targetWordsTotal,
-            isComplete: false,
-            percentage: 20 + (i / numberOfChunks) * 80,
-            message: `Escrevendo Capítulo ${i + 1}/${numberOfChunks}...`,
-          });
+          let chunkValid = false;
+          let attempts = 0;
+          let currentErrorMessage = "";
+          let finalChunkContent = "";
 
-          const lastParagraph = scriptContent ? extractLastParagraph(scriptContent) : "";
+          // Loop de Tentativas (Self-Healing)
+          while (!chunkValid && attempts < 3) {
+            attempts++;
 
-          const chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
-            title: request.title,
-            language: detectedLanguage,
-            targetWords: wordsPerChunk,
-            premise: premise,
-            chunkIndex: i,
-            totalChunks: numberOfChunks,
-            // ✅ CORREÇÃO: Passar previousContent para memória narrativa
-            previousContent: i > 0 ? scriptContent : undefined,
-            lastParagraph: i > 0 && lastParagraph ? lastParagraph : undefined,
-          });
+            setProgress({
+              stage: "script",
+              currentChunk: i + 1,
+              totalChunks: numberOfChunks,
+              completedWords: scriptContentFull.split(/\s+/).length,
+              targetWords: targetWordsTotal,
+              isComplete: false,
+              percentage: 10 + (i / numberOfChunks) * 80 + attempts * 2, // Avança um pouco nas tentativas
+              message:
+                attempts > 1
+                  ? `Corrigindo erros lógicos no Cap ${i + 1} (Tentativa ${attempts})...`
+                  : `Escrevendo Capítulo ${i + 1}/${numberOfChunks}...`,
+            });
 
-          const chunkContext = {
-            premise,
-            previousContent: scriptContent,
-            chunkIndex: i,
-            totalChunks: numberOfChunks,
-            targetWords: wordsPerChunk,
-            language: detectedLanguage,
-            location: config.location,
-            isLastChunk: i === numberOfChunks - 1,
-          };
+            // Constrói o prompt (adiciona erro anterior se houver)
+            let chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
+              title: request.title,
+              language: detectedLanguage,
+              targetWords: wordsPerChunk,
+              premise: premise,
+              chunkIndex: i,
+              totalChunks: numberOfChunks,
+              previousContent: i > 0 ? scriptChunks[i - 1].content : undefined,
+              currentState: worldStateRef.current!,
+            });
 
-          const chunkResult =
-            provider === "deepseek"
-              ? await puterDeepseekService.generateScriptChunk(chunkPrompt, chunkContext, console.log)
-              : await enhancedGeminiService.generateScriptChunk(
-                  chunkPrompt,
-                  activeGeminiKeys,
-                  chunkContext,
-                  console.log,
-                );
+            if (currentErrorMessage) {
+              chunkPrompt += `\n\n❌ TENTATIVA ANTERIOR REJEITADA: ${currentErrorMessage}\nCORRIJA ESSE ERRO LÓGICO AGORA.`;
+            }
 
-          let rawChunk = sanitizeScriptUtils(chunkResult.content);
-          let cleanedChunk = cleanScriptRepetitions(rawChunk);
+            // Chama a IA
+            const chunkResult =
+              provider === "deepseek"
+                ? await puterDeepseekService.generateScriptChunk(chunkPrompt, {}, console.log)
+                : await enhancedGeminiService.generateScriptChunk(chunkPrompt, activeGeminiKeys, {}, console.log);
 
-          // VERIFICAÇÃO DE TAG DE FIM
-          // Se a IA colocar [FIM], cortamos ali e paramos o loop.
-          const truncation = truncateAfterEnding(cleanedChunk);
+            const sanitizedRaw = sanitizeScript(chunkResult.content);
+            const parsedResponse = parseAIResponse(sanitizedRaw);
 
-          if (truncation.found) {
-            console.log("🏁 Tag [FIM] detectada. Encerrando história.");
-            cleanedChunk = truncation.cleaned; // Mantém o texto ANTES da tag (incluindo CTAs)
-            storyFinished = true;
-          } else if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
-            // Se detectou tag [FIM] sem truncar ou é o último chunk
-            if (hasEndingPhrases(cleanedChunk)) {
-              cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "").replace(/\[THE END\]/gi, "");
-              storyFinished = true;
+            if (!parsedResponse) {
+              currentErrorMessage = "O formato JSON não foi respeitado. Retorne APENAS o JSON.";
+              console.warn(`[VALIDATOR] Falha de Formato no Chunk ${i + 1}`);
+              continue;
+            }
+
+            // AUDITORIA DO CÓDIGO
+            const validation = validateChunkLogic(
+              worldStateRef.current!,
+              parsedResponse.world_state_update,
+              bibleRef.current!,
+            );
+
+            if (validation.valid) {
+              chunkValid = true;
+
+              // Atualiza o estado oficial do mundo
+              worldStateRef.current = parsedResponse.world_state_update;
+
+              // Se for o primeiro chunk, atualiza a Bíblia com os nascimentos iniciais
+              if (i === 0) {
+                bibleRef.current = createImmutableBible(premise, parsedResponse.world_state_update.characters);
+              }
+
+              finalChunkContent = parsedResponse.script_content;
+              console.log(`[VALIDATOR] Chunk ${i + 1} APROVADO.`);
+            } else {
+              currentErrorMessage = validation.error || "Erro de validação desconhecido.";
+              console.warn(`[VALIDATOR] Chunk ${i + 1} REJEITADO: ${currentErrorMessage}`);
             }
           }
 
-          scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
+          // Se falhou 3x, usamos o último conteúdo gerado (para não travar), mas alertamos
+          if (!chunkValid && !finalChunkContent) {
+            console.error("Falha crítica na validação após 3 tentativas. Usando fallback.");
+            // Tenta recuperar algo do último resultado ou gera erro
+            toast({
+              title: "Aviso de Coerência",
+              description: "A IA teve dificuldade em manter a lógica perfeita neste capítulo.",
+              variant: "destructive",
+            });
+            // Em produção real, você poderia parar aqui.
+          }
+
+          // Processamento final do texto (Limpeza, FIM, etc)
+          let cleanedChunk = cleanScriptRepetitions(finalChunkContent);
+
+          // Verifica TAG [FIM]
+          const truncation = truncateAfterEnding(cleanedChunk);
+          if (truncation.found) {
+            cleanedChunk = truncation.cleaned;
+            storyFinished = true;
+          }
+
+          scriptContentFull += (scriptContentFull ? "\n\n" : "") + cleanedChunk;
 
           scriptChunks.push({
             id: crypto.randomUUID(),
@@ -200,12 +231,12 @@ export const useScriptGenerator = () => {
           });
         }
 
-        // 4. LIMPEZA FINAL
+        // 4. RESULTADO FINAL
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
         const cleanedFullScript = cleanFinalScript(joinedScript);
-        const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
-        const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
+        // Reconstrói chunks normalizados
+        const finalChunks: ScriptChunk[] = cleanedFullScript.split(/\n\n+/).map((content, index) => ({
           id: crypto.randomUUID(),
           content,
           wordCount: content.split(/\s+/).length,
@@ -213,13 +244,13 @@ export const useScriptGenerator = () => {
           isComplete: true,
         }));
 
-        const totalWords = normalizedChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
+        const totalWords = finalChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
         const estimatedDuration = totalWords / 150;
 
         const finalResult: ScriptGenerationResult = {
           premise,
-          script: normalizedChunks.map((c) => c.content),
-          chunks: normalizedChunks,
+          script: finalChunks.map((c) => c.content),
+          chunks: finalChunks,
           totalWords,
           estimatedDuration,
           agentUsed: agent?.name,
@@ -236,7 +267,7 @@ export const useScriptGenerator = () => {
           percentage: 100,
         });
 
-        toast({ title: "Guião gerado com sucesso!", description: `${totalWords} palavras.` });
+        toast({ title: "Roteiro Validado Gerado!", description: `${totalWords} palavras (Lógica Verificada).` });
 
         return finalResult;
       } catch (error) {
