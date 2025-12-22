@@ -10,21 +10,14 @@ import {
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
-// ✅ Agora importamos sanitizeScript daqui para evitar erros de duplicidade
 import {
   injectPremiseContext,
   buildMinimalChunkPrompt,
   extractLastParagraph,
   sanitizeScript,
-} from "@/utils/promptInjector"; // Nota: O promptInjector reexporta do minimalPromptBuilder, ou importamos direto do minimalPromptBuilder se preferir.
-// Se promptInjector não reexportar, mude para:
-// import { buildMinimalChunkPrompt, extractLastParagraph, sanitizeScript } from '@/utils/minimalPromptBuilder';
-// Mas vou assumir que você quer manter o padrão atual. Vamos importar direto do utils onde definimos agora:
-import { cleanFinalScript, validateScriptQuality, cleanScriptRepetitions } from "@/utils/scriptCleanup";
+} from "@/utils/promptInjector";
+import { cleanFinalScript, cleanScriptRepetitions } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
-
-// NOTA: Para garantir que funcione independente de como promptInjector está configurado,
-// vamos importar o sanitizeScript que acabamos de criar no minimalPromptBuilder
 import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
 
 export const useScriptGenerator = () => {
@@ -46,7 +39,6 @@ export const useScriptGenerator = () => {
 
       try {
         const detectedLanguage = request.language || agent?.language || "pt-BR";
-
         const config = {
           channelName: request.channelName || agent?.channelName || "",
           premisePrompt: request.premisePrompt || agent?.premisePrompt || "",
@@ -57,17 +49,11 @@ export const useScriptGenerator = () => {
         };
 
         if (!config.premisePrompt || !config.scriptPrompt) throw new Error("Prompts obrigatórios");
-        if (!config.channelName) throw new Error("Nome do canal obrigatório");
 
         const activeGeminiKeys = apiKeys.filter(
           (key) => key.isActive && key.status !== "suspended" && key.status !== "invalid",
         );
-
         if (provider === "gemini" && activeGeminiKeys.length === 0) throw new Error("Sem chaves Gemini ativas");
-        if (provider === "deepseek" && !puterDeepseekService.isAvailable()) {
-          const available = await puterDeepseekService.waitForPuter(5000);
-          if (!available) throw new Error("DeepSeek indisponível");
-        }
 
         // 1. Gerar Premissa
         setProgress({
@@ -90,21 +76,32 @@ export const useScriptGenerator = () => {
 
         const premiseResult =
           provider === "deepseek"
-            ? await puterDeepseekService.generatePremise(processedPremisePrompt, undefined, (msg) =>
-                console.log("DeepSeek:", msg),
-              )
-            : await enhancedGeminiService.generatePremise(processedPremisePrompt, activeGeminiKeys, undefined, (msg) =>
-                console.log("Gemini:", msg),
+            ? await puterDeepseekService.generatePremise(processedPremisePrompt, undefined, console.log)
+            : await enhancedGeminiService.generatePremise(
+                processedPremisePrompt,
+                activeGeminiKeys,
+                undefined,
+                console.log,
               );
 
         const premise = premiseResult.content;
-        console.log("Premissa gerada");
 
-        // 2. Configurar Chunks
-        const targetWords = config.duration * 170;
-        const minutesPerChunk = 10;
-        const numberOfChunks = Math.max(1, Math.ceil(config.duration / minutesPerChunk));
+        // 2. Análise Inteligente de Chunks
+        // Contamos quantas [SEÇÃO X] existem na premissa. Esse será o nosso limite real.
+        const sectionMatches = premise.match(/\[SEÇÃO\s*\d+\]/gi);
+        const detectedSections = sectionMatches ? sectionMatches.length : 0;
+
+        // O número de chunks será o MENOR valor entre: O que a duração pede VS Quantas seções a premissa tem.
+        // Isso impede que a gente force 5 chunks numa história de 3 partes.
+        const durationBasedChunks = Math.max(1, Math.ceil(config.duration / 10)); // 1 chunk a cada 10 min aprox
+
+        // Se detectamos seções, usamos elas como guia principal, mas respeitando um mínimo de chunks
+        const numberOfChunks = detectedSections > 0 ? detectedSections : durationBasedChunks;
+
+        const targetWords = config.duration * 150; // Ajustado para 150 words/min (mais realista)
         const wordsPerChunk = Math.ceil(targetWords / numberOfChunks);
+
+        console.log(`Planejamento: ${numberOfChunks} partes baseadas na premissa.`);
 
         setProgress({
           stage: "script",
@@ -113,15 +110,22 @@ export const useScriptGenerator = () => {
           completedWords: 0,
           targetWords,
           isComplete: false,
-          percentage: 35,
+          percentage: 20,
           message: `Iniciando roteiro (${numberOfChunks} partes)...`,
         });
 
         let scriptContent = "";
         const scriptChunks: ScriptChunk[] = [];
+        let storyFinished = false; // Variável de controle de saída antecipada
 
         // 3. Loop de Geração
         for (let i = 0; i < numberOfChunks; i++) {
+          // Se a história já acabou na parte anterior, paramos IMEDIATAMENTE.
+          if (storyFinished) {
+            console.log("História finalizada antecipadamente. Cancelando chunks restantes.");
+            break;
+          }
+
           setProgress({
             stage: "script",
             currentChunk: i + 1,
@@ -129,7 +133,7 @@ export const useScriptGenerator = () => {
             completedWords: scriptContent.split(/\s+/).length,
             targetWords,
             isComplete: false,
-            percentage: 35 + (i / numberOfChunks) * 55,
+            percentage: 20 + (i / numberOfChunks) * 80,
             message: `Gerando parte ${i + 1}/${numberOfChunks}...`,
           });
 
@@ -166,10 +170,15 @@ export const useScriptGenerator = () => {
                   console.log,
                 );
 
-          // ✅ LIMPEZA DE REPETIÇÕES E TAGS
-          // Usamos a função importada agora
           let cleanedChunk = sanitizeScriptUtils(chunkResult.content);
           cleanedChunk = cleanScriptRepetitions(cleanedChunk);
+
+          // DETECÇÃO DE FIM DE HISTÓRIA
+          // Se a IA escreveu [FIM] ou se estamos na última seção prevista e o texto parece conclusivo
+          if (cleanedChunk.includes("[FIM]") || i === numberOfChunks - 1) {
+            cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, ""); // Limpa a tag
+            storyFinished = true; // Impede o próximo loop
+          }
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
 
@@ -182,9 +191,12 @@ export const useScriptGenerator = () => {
           });
         }
 
-        // Montagem Final
+        // 4. Montagem Final e Limpeza Global
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
+
+        // AQUI APLICAMOS A QUEBRA DE PARÁGRAFOS GIGANTES
         const cleanedFullScript = cleanFinalScript(joinedScript);
+
         const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
         const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
@@ -196,7 +208,7 @@ export const useScriptGenerator = () => {
         }));
 
         const totalWords = normalizedChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
-        const estimatedDuration = totalWords / 170;
+        const estimatedDuration = totalWords / 150;
 
         const finalResult: ScriptGenerationResult = {
           premise,

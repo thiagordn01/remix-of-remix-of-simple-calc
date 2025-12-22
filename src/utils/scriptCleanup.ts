@@ -1,72 +1,65 @@
-// ✅ src/utils/scriptCleanup.ts
-// Versão Final - Com filtro anti-gagueira
-
 /**
- * 1. Remove repetições onde a IA repete a última frase do contexto anterior.
- * Ex: "O sol nasceu. O sol nasceu e brilhou..." -> "O sol nasceu e brilhou..."
+ * Utilitários para limpeza e formatação de roteiros.
  */
+
+// Quebra parágrafos gigantes em menores baseados em pontuação
+function breakHugeParagraphs(text: string): string {
+  // Se um parágrafo tiver mais de 250 caracteres, tenta quebrar no ponto final mais próximo
+  return text
+    .split("\n")
+    .map((paragraph) => {
+      if (paragraph.length < 250) return paragraph;
+
+      // Substitui ". " por ".\n\n" para forçar quebra, mas tenta não quebrar siglas
+      return paragraph.replace(/([.?!])\s+([A-Z])/g, "$1\n\n$2");
+    })
+    .join("\n");
+}
+
 export function cleanScriptRepetitions(text: string): string {
   if (!text) return "";
-
   let cleaned = text;
 
-  // Filtro 1: Repetição exata de blocos longos (Gagueira de Parágrafo)
-  // Procura por: (texto de 15 chars) seguido imediatamente de (texto de 15 chars)
+  // 1. Remove a tag [FIM] se ela aparecer no texto (para não ir pro áudio)
+  cleaned = cleaned.replace(/\[FIM\]/gi, "");
+
+  // 2. Remove repetição exata de blocos (A. A.)
   const paragraphEchoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
   cleaned = cleaned.replace(paragraphEchoRegex, "$1");
 
-  // Filtro 2: Repetição de início de frase (Eco de Continuidade)
-  // Ex: Texto anterior terminou em "Fim." e novo começa com "Fim. O dia..."
+  // 3. Remove repetição de início (Eco)
   const startEchoRegex = /^([^\.!?]{10,}[.!?])\s*\1/i;
   cleaned = cleaned.replace(startEchoRegex, "$1");
-
-  // Filtro 3: Repetição de frases curtas consecutivas
-  const shortPhraseRegex = /([A-Z][^.!?]+[.!?])\s*\1/g;
-  cleaned = cleaned.replace(shortPhraseRegex, "$1");
 
   return cleaned;
 }
 
-/**
- * 2. Função principal de limpeza chamada pelo useScriptGenerator
- */
 export function cleanFinalScript(text: string): string {
   if (!text) return "";
-
   let result = text;
 
-  // Remove Markdown (*, #) e Metadados ([Música])
+  // Limpezas básicas
   result = result
     .replace(/\*\*/g, "")
-    .replace(/\[.*?\]/g, "")
+    .replace(/\[.*?\]/g, "") // Remove tags restantes
     .replace(/^\s*[\-\*]\s+/gm, "")
     .replace(/#{1,6}\s?/g, "");
 
-  // Remove Títulos de Seções que a IA adora inventar
-  const metaTitles = [
-    /^Título:.*$/im,
-    /^Roteiro:.*$/im,
-    /^Parte \d+.*$/im,
-    /^Cena \d+.*$/im,
-    /^Narrador:.*$/im,
-    /^Intro:.*$/im,
-    /^Outro:.*$/im,
-  ];
+  // Remove títulos indesejados
+  const metaTitles = [/^Título:.*$/im, /^Roteiro:.*$/im, /^Parte \d+.*$/im];
   metaTitles.forEach((regex) => {
     result = result.replace(regex, "");
   });
 
-  // APLICA O FILTRO DE REPETIÇÃO
+  // APLICA AS CORREÇÕES CRÍTICAS
   result = cleanScriptRepetitions(result);
+  result = breakHugeParagraphs(result); // <--- AQUI ESTÁ A MÁGICA DOS PARÁGRAFOS
 
-  // Normaliza espaços (máximo 2 quebras de linha)
-  return result
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/ {2,}/g, " ")
-    .trim();
+  // Normaliza quebras de linha (máximo 2)
+  return result.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// Mantido para compatibilidade com seus outros arquivos
+// Funções auxiliares mantidas
 export function validateScriptQuality(script: string, targetWords: number) {
   return { score: 100, issues: [] };
 }

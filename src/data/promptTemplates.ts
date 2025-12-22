@@ -5,71 +5,62 @@ export interface PromptTemplate {
   script: string;
 }
 
-// --- FUNÇÕES GERADORAS DINÂMICAS ---
-
 const getNeutralPremise = (targetLanguage: string, culturalContext: string) => `
 ATENÇÃO: Você é um motor de estruturação de roteiros.
-Sua única função é organizar o PROMPT DO USUÁRIO em blocos lógicos para processamento.
+Sua única função é organizar o PROMPT DO USUÁRIO em blocos lógicos.
 
 ---
-PROMPT DO USUÁRIO (Conteúdo Real):
+PROMPT DO USUÁRIO:
 """
 [prompt_usuario]
 """
 ---
 
 CONFIGURAÇÕES:
-- IDIOMA DE SAÍDA: ${targetLanguage} (Obrigatório)
-- CONTEXTO: ${culturalContext || "Padrão"}
+- IDIOMA: ${targetLanguage}
 - PÚBLICO: [localizacao]
 
-⚠️ INSTRUÇÃO TÉCNICA DE ENGENHARIA (CRÍTICO):
-Para o funcionamento do software, você DEVE dividir a resposta em blocos numerados usando a tag [SEÇÃO X].
-NÃO altere a ideia do usuário. Apenas divida o texto para caber nos blocos.
+⚠️ INSTRUÇÃO TÉCNICA (CRÍTICO):
+Divida a resposta em blocos numerados usando a tag [SEÇÃO X].
 
-FORMATO DE SAÍDA OBRIGATÓRIO (O Software só lê este formato):
+FORMATO DE SAÍDA OBRIGATÓRIO:
 
 [SEÇÃO 1]
-(Primeira parte do conteúdo solicitado. Se for uma lista, itens 1-3. Se for história, início.)
+(Início da história/conteúdo)
 
 [SEÇÃO 2]
-(Parte central do conteúdo. Continuação direta.)
+(Meio/Desenvolvimento)
 
 [SEÇÃO 3]
-(Parte final do conteúdo.)
+(Final/Clímax e Conclusão)
 
-(Crie até [SEÇÃO 5] se o conteúdo for muito extenso).
-
-REGRAS:
-1. Respeite o idioma ${targetLanguage}.
-2. NÃO repita tópicos entre as seções.
-3. Cada seção deve ter conteúdo único.
+(Crie mais seções APENAS se o conteúdo for muito extenso).
 `;
 
 const getNeutralScript = (targetLanguage: string, culturalContext: string) => `
-Gere o roteiro de narração (texto falado) para esta parte do vídeo.
+Gere o roteiro de narração para esta parte.
 
 IDIOMA: ${targetLanguage}
-CONTEXTO: ${culturalContext}
-CANAL: [canal]
+TOM: [canal]
 
-INSTRUÇÕES DE ESTILO (Do Usuário):
+INSTRUÇÕES DO USUÁRIO:
 """
 [prompt_usuario]
 """
 
-Converta a premissa fornecida acima em texto de narração fluido.
-Ignore instruções de "Comece com..." se esta não for a primeira parte.
-`;
+⚠️ REGRAS DE FORMATAÇÃO VISUAL (OBRIGATÓRIO):
+1. PARÁGRAFOS CURTOS: Use no máximo 2 ou 3 frases por parágrafo.
+2. ESPAÇAMENTO: Pule uma linha entre cada parágrafo.
+3. FLUIDEZ: Escreva como se fosse falado (natural).
 
-// --- EXPORTAÇÃO ---
+⚠️ REGRA DE FINALIZAÇÃO:
+Se esta for a última parte da história e você a concluiu, escreva a tag [FIM] no final do texto.
+`;
 
 export const defaultPrompts: Record<string, PromptTemplate> = {};
 
 export function getDefaultPrompts(languageCode: string): PromptTemplate {
-  // Busca dados ricos do idioma no seu arquivo languages.ts
   const langObj = getLanguageByCode(languageCode);
-
   const langName = langObj ? langObj.name : languageCode;
   const context = langObj ? langObj.culturalContext : "";
 
@@ -82,8 +73,5 @@ export function getDefaultPrompts(languageCode: string): PromptTemplate {
 export function getSystemInstructions(languageCode: string): string {
   const langObj = getLanguageByCode(languageCode);
   const langName = langObj ? langObj.name : languageCode;
-
-  return `System: Você é um assistente de roteiro focado em fidelidade ao prompt do usuário e formatação técnica.
-  Idioma prioritário: ${langName}.
-  Mantenha as tags [SEÇÃO X] intactas.`;
+  return `Você é um roteirista expert. Escreva em ${langName}. Use parágrafos curtos.`;
 }
