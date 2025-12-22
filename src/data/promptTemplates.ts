@@ -6,51 +6,66 @@ export interface PromptTemplate {
 }
 
 const getNeutralPremise = (targetLanguage: string, culturalContext: string) => `
-ATENÇÃO: Arquiteto de Histórias.
-Estruture a ideia em CAPÍTULOS lógicos.
+ATENÇÃO: Você é um Arquiteto de Narrativas (Showrunner).
+Sua tarefa é criar a BÍBLIA e a ESTRUTURA de uma história, mas NÃO escrever o roteiro ainda.
 
-PROMPT DO UTILIZADOR:
+PROMPT DO USUÁRIO:
 """
 [prompt_usuario]
 """
 
 CONFIGURAÇÕES:
 - IDIOMA: ${targetLanguage}
-- DURAÇÃO ALVO: [duracao] min
+- DURAÇÃO TOTAL: [duracao] minutos
 
-SAÍDA OBRIGATÓRIA:
+⚠️ INSTRUÇÃO CRÍTICA DE COERÊNCIA:
+1. Defina nomes fixos para os personagens. Não mude depois.
+2. Defina a idade da criança e mantenha a consistência (se passou 5 anos do acidente, some a idade corretamente).
+3. Defina a linha do tempo claramente.
+
+FORMATO DE SAÍDA OBRIGATÓRIO (Siga estritamente):
+
+[BIBLE]
+- PROTAGONISTA: [Nome, Idade, Profissão]
+- CRIANÇA: [Nome, Idade Atual, Relação com Protagonista]
+- ANTAGONISTA: [Nome, Função]
+- ITEM CHAVE: [Ex: Medalhão, Boneca, Foto]
+- LINHA DO TEMPO: [Ex: Acidente há 5 anos -> Encontro hoje]
+[/BIBLE]
 
 [CAPITULO 1]
-(Resumo do início)
+(Apenas o Incidente Inicial. O que acontece: ...)
 
 [CAPITULO 2]
-(Resumo do meio)
+(Apenas o Desenvolvimento/Investigação. O que acontece: ...)
 
 [CAPITULO 3]
-(Resumo do fim)
+(Apenas o Clímax e Conclusão. O que acontece: ...)
 
-(Crie [CAPITULO 4] etc. apenas se a duração exigir).
+(Adicione mais capítulos APENAS se necessário para a duração, mas mantenha a história linear).
 `;
 
 const getNeutralScript = (targetLanguage: string, culturalContext: string) => `
-Escreva o guião para este capítulo.
+ATENÇÃO: Você é um Roteirista focado em CONTINUIDADE.
+Escreva APENAS o conteúdo deste capítulo específico.
 
 IDIOMA: ${targetLanguage}
 CONTEXTO: ${culturalContext}
 
-INSTRUÇÕES E CTA (Do Utilizador):
+INSTRUÇÕES DO USUÁRIO:
 """
 [prompt_usuario]
 """
 
-⚠️ REGRAS VISUAIS:
-1. Use parágrafos curtos (2-3 frases).
-2. Pule uma linha entre parágrafos.
+⚠️ REGRAS DE OURO (ANTI-ALUCINAÇÃO):
+1. Use APENAS os nomes definidos na BÍBLIA (Bible). Não invente novos nomes.
+2. Siga ESTRITAMENTE o resumo do capítulo atual. NÃO avance para o próximo capítulo.
+3. NÃO repita cenas que já aconteceram.
+4. NÃO peça "Likes/Inscrição" no meio do texto. Apenas no final do ÚLTIMO capítulo.
+5. Se a história não acabou neste capítulo, NÃO escreva um final. Apenas pare a ação.
 
-🚨 REGRA DE ENCERRAMENTO (CRÍTICA):
-Inclua os pedidos de "Like", "Subscreva" ou "Comente" conforme o utilizador pediu (no meio ou no fim).
-MAS, assim que a história e a despedida terminarem, você DEVE escrever a tag: [FIM]
-O sistema precisa da tag [FIM] para saber que não deve gerar mais texto.
+TAG DE FINALIZAÇÃO:
+Somente quando a história estiver 100% concluída no Último Capítulo, escreva: [FIM]
 `;
 
 export const defaultPrompts: Record<string, PromptTemplate> = {};
@@ -69,5 +84,5 @@ export function getDefaultPrompts(languageCode: string): PromptTemplate {
 export function getSystemInstructions(languageCode: string): string {
   const langObj = getLanguageByCode(languageCode);
   const langName = langObj ? langObj.name : languageCode;
-  return `Você é um guionista expert em ${langName}. Siga o prompt do utilizador, inclua os CTAs pedidos e use a tag [FIM] para encerrar.`;
+  return `Você é um roteirista expert em ${langName}. Mantenha consistência absoluta de nomes e fatos.`;
 }
