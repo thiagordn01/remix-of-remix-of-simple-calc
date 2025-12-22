@@ -1554,9 +1554,19 @@ export class EnhancedGeminiService {
           // ✅ NOVA VALIDAÇÃO FORTE - Detectar meta-conteúdo e respostas curtas
           const texto = response?.trim() || '';
 
-          // 1. Verificar tamanho mínimo
+          // 1. Verificar tamanho mínimo (dinâmico e mais flexível)
           const words = texto.split(/\s+/).filter(w => w.length > 0);
-          const minWords = context.isLastChunk ? 150 : 200; // Último chunk pode ser menor
+          let minWords: number;
+
+          if (context.targetWords && context.targetWords > 0) {
+            // Exigir ~40% da meta, limitado a 200, com piso por tipo de chunk
+            const frac = Math.round(context.targetWords * 0.4);
+            const baseMin = context.isLastChunk ? 80 : 120;
+            minWords = Math.min(200, Math.max(baseMin, frac));
+          } else {
+            // Sem meta explícita -> valores padrão mais suaves
+            minWords = context.isLastChunk ? 80 : 120;
+          }
 
           if (words.length < minWords) {
             console.warn(`⚠️ Resposta muito curta: ${words.length} palavras (mínimo: ${minWords})`);
