@@ -10,16 +10,56 @@ export interface ScriptGenerationRequest {
   duration?: number; // em minutos
   language?: string;
   location?: string;
+  /** Identificador do agente selecionado (para tracking/analytics) */
+  agentId?: string;
+  /** Meta opcional de palavras para a premissa */
+  premiseWordTarget?: number;
 }
 
 export interface GeminiApiKey {
   id: string;
   key: string;
+  /** Nome legível da chave (exibido na UI) */
+  name?: string;
+  /** Modelo associado (ex: gemini-2.0-flash) */
+  model?: string;
   isActive: boolean;
-  status: "active" | "suspended" | "quota_exceeded" | "invalid";
+  /**
+   * Status operacional da chave. Inclui estados extras usados pela UI
+   * (valid, unknown, rate_limited, checking) além dos estados persistidos.
+   */
+  status?:
+    | "active"
+    | "suspended"
+    | "quota_exceeded"
+    | "invalid"
+    | "unknown"
+    | "valid"
+    | "rate_limited"
+    | "checking";
   lastUsed?: number;
-  errorCount: number;
+  errorCount?: number;
   provider?: AIProvider;
+  /** Contador de requisições usado em monitores de status */
+  requestCount?: number;
+  /** Mensagem de status para exibição na UI */
+  statusMessage?: string;
+  /** Timestamp da última validação bem-sucedida na UI */
+  lastValidated?: Date;
+}
+
+export interface DeepseekApiKey {
+  id: string;
+  key: string;
+  name?: string;
+  model?: string;
+  isActive: boolean;
+  status?: "active" | "suspended" | "quota_exceeded" | "invalid" | "unknown" | "valid" | "rate_limited" | "checking";
+  lastUsed?: number;
+  errorCount?: number;
+  provider?: AIProvider;
+  requestCount?: number;
+  statusMessage?: string;
 }
 
 export interface ScriptChunk {
