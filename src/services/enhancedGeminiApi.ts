@@ -1545,7 +1545,7 @@ export class EnhancedGeminiService {
       availableApis,
       context,
       {
-        temperature: 0.7,
+        temperature: 0.9,
         maxRetries: 3,
         timeoutMs: timeoutForChunk,
         maxTokens: maxTokensForChunk,

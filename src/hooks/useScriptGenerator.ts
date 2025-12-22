@@ -7,19 +7,22 @@ import {
   GeminiApiKey,
   ScriptChunk,
   AIProvider,
-  WorldState,
-  StructuredScriptResponse,
 } from "@/types/scripts";
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
 import { buildMinimalChunkPrompt, sanitizeScript } from "@/utils/minimalPromptBuilder";
-import { initializeWorldState, createImmutableBible, validateChunkLogic, ImmutableBible } from "@/utils/factBible";
 import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
 
+// Resposta estruturada flexível baseada em notas de coerência
+interface CoherentScriptResponse {
+  script_content: string;
+  coherence_notes?: string[];
+}
+
 // Função auxiliar para parsear o JSON da IA de forma segura
-function parseAIResponse(content: string): StructuredScriptResponse | null {
+function parseAIResponse(content: string): CoherentScriptResponse | null {
   try {
     // Tenta encontrar o JSON dentro do texto (caso a IA fale algo antes/depois)
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -37,9 +40,8 @@ export const useScriptGenerator = () => {
   const [result, setResult] = useState<ScriptGenerationResult | null>(null);
   const { toast } = useToast();
 
-  // Refs para manter estado durante o processo assíncrono
-  const worldStateRef = useRef<WorldState | null>(null);
-  const bibleRef = useRef<ImmutableBible | null>(null);
+  // Ref para manter memória de coerência durante o processo assíncrono
+  const coherenceNotesRef = useRef<string[]>([]);
 
   const generateScript = useCallback(
     async (
@@ -96,11 +98,8 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // INICIALIZAR SISTEMA DE ESTADO
-        worldStateRef.current = initializeWorldState(premise);
-        // Cria a bíblia imutável (aqui poderíamos extrair chars iniciais da premissa se tivéssemos um parser,
-        // por enquanto inicializamos vazia e populamos no primeiro chunk)
-        bibleRef.current = createImmutableBible(premise, {});
+        // Inicializa memória de coerência para esta geração
+        coherenceNotesRef.current = [];
 
         // 2. PARSE DE ESTRUTURA
         const chapterMatches = premise.match(/\[(?:CAPITULO|SEÇÃO|SECTION|PART)\s*\d+\]/gi);
@@ -141,8 +140,21 @@ export const useScriptGenerator = () => {
                   : `Escrevendo Capítulo ${i + 1}/${numberOfChunks}...`,
             });
 
+            // Monta bloco de memória de coerência acumulada
+            let memoryBlock = "";
+            if (coherenceNotesRef.current.length > 0) {
+              const factsList = coherenceNotesRef.current
+                .slice(-30)
+                .map((fact, idx) => `- ${idx + 1}. ${fact}`)
+                .join("\n");
+
+              memoryBlock = `\n\n=== CONTEXTO DE COERÊNCIA (FATOS JÁ ESTABELECIDOS) ===\nAqui está o que você estabeleceu como verdade nos capítulos anteriores.\nNÃO CONTRADIGA NENHUM DESTES PONTOS. Em caso de dúvida, prefira manter o que já foi estabelecido:\n\n${factsList}\n`;
+            }
+
+            const basePromptWithMemory = `${config.scriptPrompt}${memoryBlock}`;
+
             // Constrói o prompt (adiciona erro anterior se houver)
-            let chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
+            let chunkPrompt = buildMinimalChunkPrompt(basePromptWithMemory, {
               title: request.title,
               language: detectedLanguage,
               targetWords: wordsPerChunk,
@@ -150,7 +162,6 @@ export const useScriptGenerator = () => {
               chunkIndex: i,
               totalChunks: numberOfChunks,
               previousContent: i > 0 ? scriptChunks[i - 1].content : undefined,
-              currentState: worldStateRef.current!,
             });
 
             if (currentErrorMessage) {
@@ -172,30 +183,45 @@ export const useScriptGenerator = () => {
               continue;
             }
 
-            // AUDITORIA DO CÓDIGO
-            const validation = validateChunkLogic(
-              worldStateRef.current!,
-              parsedResponse.world_state_update,
-              bibleRef.current!,
-            );
+            // Validação simples: formato + tamanho mínimo
+            const scriptText = (parsedResponse.script_content || "").trim();
+            const wordCount = scriptText ? scriptText.split(/\s+/).filter(Boolean).length : 0;
 
-            if (validation.valid) {
-              chunkValid = true;
-
-              // Atualiza o estado oficial do mundo
-              worldStateRef.current = parsedResponse.world_state_update;
-
-              // Se for o primeiro chunk, atualiza a Bíblia com os nascimentos iniciais
-              if (i === 0) {
-                bibleRef.current = createImmutableBible(premise, parsedResponse.world_state_update.characters);
-              }
-
-              finalChunkContent = parsedResponse.script_content;
-              console.log(`[VALIDATOR] Chunk ${i + 1} APROVADO.`);
-            } else {
-              currentErrorMessage = validation.error || "Erro de validação desconhecido.";
-              console.warn(`[VALIDATOR] Chunk ${i + 1} REJEITADO: ${currentErrorMessage}`);
+            if (!scriptText || wordCount < 200) {
+              currentErrorMessage = "Texto muito curto. Aprofunde mais o conteúdo/cena.";
+              console.warn(
+                `[VALIDATOR] Chunk ${i + 1} rejeitado por texto curto ou vazio (${wordCount} palavras).`,
+              );
+              continue;
             }
+
+            // Atualiza memória de coerência com as novas notas
+            if (Array.isArray(parsedResponse.coherence_notes)) {
+              const newFacts = parsedResponse.coherence_notes
+                .map((note) => String(note).trim())
+                .filter((note) => note.length > 0);
+
+              const existing = new Set(coherenceNotesRef.current);
+              const merged: string[] = [];
+
+              coherenceNotesRef.current.forEach((fact) => {
+                if (fact.trim()) merged.push(fact.trim());
+              });
+
+              newFacts.forEach((fact) => {
+                if (!existing.has(fact)) {
+                  merged.push(fact);
+                  existing.add(fact);
+                }
+              });
+
+              coherenceNotesRef.current = merged.slice(-50);
+            }
+
+            chunkValid = true;
+            finalChunkContent = scriptText;
+            console.log(`[VALIDATOR] Chunk ${i + 1} APROVADO com ${wordCount} palavras.`);
+
           }
 
           // Se falhou 3x, usamos o último conteúdo gerado (para não travar), mas alertamos
