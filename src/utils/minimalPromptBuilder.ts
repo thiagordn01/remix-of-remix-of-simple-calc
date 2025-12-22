@@ -3,7 +3,7 @@
  * Sistema de Construção de Prompts
  *
  * PRINCÍPIO: O prompt do usuário define a estrutura.
- * Este sistema apenas fornece CONTEXTO para continuação.
+ * Este sistema apenas fornece CONTEXTO para continuação e CONSISTÊNCIA de fatos.
  */
 
 import {
@@ -13,6 +13,14 @@ import {
   buildAntiDuplicationPrompt,
   NarrativeMemory
 } from './narrativeMemory';
+
+import {
+  buildFactBible,
+  formatFactBibleForPrompt,
+  detectContradictions,
+  updateFactBible,
+  FactBible
+} from './factBible';
 
 export interface MinimalChunkContext {
   title: string;
@@ -144,7 +152,7 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
  * Constrói o prompt para um chunk de roteiro
  *
  * IMPORTANTE: Respeita o prompt do usuário como fonte de verdade.
- * Adiciona apenas contexto para continuação.
+ * Adiciona BÍBLIA DE FATOS para consistência e contexto para continuação.
  */
 export function buildMinimalChunkPrompt(
   userPrompt: string,
@@ -167,8 +175,12 @@ export function buildMinimalChunkPrompt(
   // Construir memória narrativa do que já foi escrito
   const memory = buildNarrativeMemory(previousContent || '', chunkIndex);
 
+  // ✅ NOVO: Construir Bíblia de Fatos para consistência
+  const factBible = buildFactBible(premise, previousContent || '');
+  const factBibleBlock = formatFactBibleForPrompt(factBible, premise);
+
   // Extrair dados da premissa
-  const bible = extractBible(premise);
+  const bibleText = extractBible(premise);
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   // Início do prompt - Instruções básicas
@@ -182,12 +194,21 @@ export function buildMinimalChunkPrompt(
 🌐 IDIOMA OBRIGATÓRIO: ${languageInstruction}
 `;
 
-  // Adicionar contexto da premissa se disponível
-  if (bible) {
+  // ✅ BÍBLIA DE FATOS - PRIORIDADE MÁXIMA PARA CONSISTÊNCIA
+  // Vem ANTES de tudo para garantir que a IA respeite
+  if (factBibleBlock) {
+    prompt += factBibleBlock;
+  } else if (bibleText) {
+    // Fallback: usar bíblia extraída do texto da premissa
     prompt += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📘 DADOS FIXOS DA HISTÓRIA (use estes nomes/fatos):
-${bible}
+╔══════════════════════════════════════════════════════════════════╗
+║  📖 FATOS FIXOS DA HISTÓRIA - NÃO MUDE                           ║
+╚══════════════════════════════════════════════════════════════════╝
+
+${bibleText}
+
+⛔ REGRA CRÍTICA: Use EXATAMENTE estes nomes e relações.
+   NÃO invente nomes novos para personagens já estabelecidos.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
   }
@@ -217,7 +238,7 @@ ${sectionContent}
 `;
   }
 
-  // PROMPT DO USUÁRIO - PRIORIDADE MÁXIMA
+  // PROMPT DO USUÁRIO
   prompt += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 INSTRUÇÕES DO CRIADOR (SIGA ESTAS DIRETRIZES):
@@ -234,6 +255,7 @@ ${userPrompt}
 ⚡ ESTA É A ABERTURA:
 - Comece de forma envolvente
 - Capture a atenção do espectador
+- Estabeleça os personagens com os nomes EXATOS da Bíblia de Fatos
 `;
   } else if (chunkIndex === totalChunks - 1) {
     prompt += `
@@ -241,6 +263,7 @@ ${userPrompt}
 - Conclua a narrativa
 - Não deixe pontas soltas
 - NÃO faça recapitulação/resumo do que aconteceu
+- Use os MESMOS nomes de personagens do início ao fim
 `;
   } else {
     prompt += `
@@ -248,10 +271,11 @@ ${userPrompt}
 - Continue naturalmente
 - Mantenha o engajamento
 - NÃO faça introduções ou encerramentos
+- MANTENHA os nomes de personagens consistentes
 `;
   }
 
-  // Regras técnicas finais
+  // Regras técnicas finais com ênfase em consistência
   prompt += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ REGRAS DE FORMATAÇÃO:
@@ -260,6 +284,12 @@ ${userPrompt}
 - NÃO use [TAGS], (instruções), *formatações*
 - NÃO faça meta-comentários sobre o texto
 - Termine em frase completa (com ponto final)
+
+⛔ REGRAS DE CONSISTÊNCIA (CRÍTICO):
+- Use EXATAMENTE os nomes de personagens já estabelecidos
+- NÃO mude relações (se X é irmã de Y, continua sendo irmã)
+- NÃO invente nomes novos para personagens existentes
+- Se mencionou "Maria" antes, NÃO mude para "Mariana" ou "Marta"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Escreva o roteiro:
