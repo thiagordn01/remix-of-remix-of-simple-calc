@@ -3,7 +3,7 @@
  * Sistema de Construção de Prompts
  *
  * PRINCÍPIO: O prompt do usuário define a estrutura.
- * Este sistema apenas fornece CONTEXTO para continuação.
+ * Este sistema apenas fornece CONTEXTO para continuação e CONSISTÊNCIA de fatos.
  */
 
 import {
@@ -13,6 +13,14 @@ import {
   buildAntiDuplicationPrompt,
   NarrativeMemory
 } from './narrativeMemory';
+
+import {
+  buildFactBible,
+  formatFactBibleForPrompt,
+  detectContradictions,
+  updateFactBible,
+  FactBible
+} from './factBible';
 
 export interface MinimalChunkContext {
   title: string;
@@ -144,7 +152,7 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
  * Constrói o prompt para um chunk de roteiro
  *
  * IMPORTANTE: Respeita o prompt do usuário como fonte de verdade.
- * Adiciona apenas contexto para continuação.
+ * Adiciona BÍBLIA DE FATOS para consistência e contexto para continuação.
  */
 export function buildMinimalChunkPrompt(
   userPrompt: string,
@@ -167,8 +175,12 @@ export function buildMinimalChunkPrompt(
   // Construir memória narrativa do que já foi escrito
   const memory = buildNarrativeMemory(previousContent || '', chunkIndex);
 
-  // Extrair dados da premissa
-  const bible = extractBible(premise);
+  // ✅ Extrair fatos do texto JÁ GERADO (não da premissa)
+  // Isso mantém consistência de personagens/relações que a IA criou
+  const factBible = buildFactBible(premise, previousContent || '');
+  const factBibleBlock = formatFactBibleForPrompt(factBible, premise);
+
+  // Extrair direção para esta parte da premissa
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   // Início do prompt - Instruções básicas
@@ -182,14 +194,10 @@ export function buildMinimalChunkPrompt(
 🌐 IDIOMA OBRIGATÓRIO: ${languageInstruction}
 `;
 
-  // Adicionar contexto da premissa se disponível
-  if (bible) {
-    prompt += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📘 DADOS FIXOS DA HISTÓRIA (use estes nomes/fatos):
-${bible}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
+  // ✅ FATOS JÁ ESTABELECIDOS (apenas se houver texto anterior)
+  // Mostra personagens/relações que a própria IA já criou para manter consistência
+  if (factBibleBlock && chunkIndex > 0) {
+    prompt += factBibleBlock;
   }
 
   // Adicionar memória do que já foi escrito (se não for primeiro chunk)
@@ -217,7 +225,7 @@ ${sectionContent}
 `;
   }
 
-  // PROMPT DO USUÁRIO - PRIORIDADE MÁXIMA
+  // PROMPT DO USUÁRIO
   prompt += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 INSTRUÇÕES DO CRIADOR (SIGA ESTAS DIRETRIZES):
@@ -241,6 +249,7 @@ ${userPrompt}
 - Conclua a narrativa
 - Não deixe pontas soltas
 - NÃO faça recapitulação/resumo do que aconteceu
+- Continue usando os MESMOS nomes de personagens
 `;
   } else {
     prompt += `
@@ -248,6 +257,7 @@ ${userPrompt}
 - Continue naturalmente
 - Mantenha o engajamento
 - NÃO faça introduções ou encerramentos
+- Continue usando os MESMOS nomes de personagens
 `;
   }
 
@@ -261,7 +271,20 @@ ${userPrompt}
 - NÃO faça meta-comentários sobre o texto
 - Termine em frase completa (com ponto final)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
 
+  // Regras de consistência apenas para chunks 2+
+  if (chunkIndex > 0) {
+    prompt += `
+⚠️ CONSISTÊNCIA (você já começou esta história):
+- Continue usando os MESMOS nomes de personagens
+- Mantenha as relações consistentes (irmã continua sendo irmã)
+- Não mude fatos já estabelecidos
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+  }
+
+  prompt += `
 Escreva o roteiro:
 `;
 
