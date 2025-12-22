@@ -10,15 +10,42 @@ import {
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
-import {
-  injectPremiseContext,
-  buildMinimalChunkPrompt,
-  extractLastParagraph,
-  sanitizeScript,
-} from "@/utils/promptInjector";
+import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from "@/utils/promptInjector";
 import { cleanFinalScript, cleanScriptRepetitions } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
+
+// ✅ NOVO: Detector Semântico de Fim de História
+// Se a IA escrever qualquer uma dessas frases no final, paramos a geração IMEDIATAMENTE.
+function hasEndingPhrases(text: string): boolean {
+  const lower = text.toLowerCase().slice(-500); // Olha só o finalzinho
+  const endTriggers = [
+    // Tags explícitas
+    "[fim]",
+    "[the end]",
+    "[fin]",
+    "***",
+    // Português
+    "inscreva-se",
+    "deixe seu like",
+    "até a próxima",
+    "obrigado por assistir",
+    "nos vemos no próximo",
+    // Inglês
+    "subscribe",
+    "thanks for watching",
+    "see you in the next",
+    "don't forget to like",
+    // Polonês (Para seu caso específico)
+    "subskrybuj",
+    "do usłyszenia",
+    "do zobaczenia",
+    "dajcie znać w komentarzach",
+    "oceniając ją w skali",
+  ];
+
+  return endTriggers.some((trigger) => lower.includes(trigger));
+}
 
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -86,22 +113,22 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // 2. Análise Inteligente de Chunks
-        // Contamos quantas [SEÇÃO X] existem na premissa. Esse será o nosso limite real.
+        // 2. Planejamento Inteligente
+        // Se a premissa tiver [SEÇÃO X], usamos isso como contagem REAL.
         const sectionMatches = premise.match(/\[SEÇÃO\s*\d+\]/gi);
         const detectedSections = sectionMatches ? sectionMatches.length : 0;
 
-        // O número de chunks será o MENOR valor entre: O que a duração pede VS Quantas seções a premissa tem.
-        // Isso impede que a gente force 5 chunks numa história de 3 partes.
-        const durationBasedChunks = Math.max(1, Math.ceil(config.duration / 10)); // 1 chunk a cada 10 min aprox
+        // Mínimo de 1 chunk, Máximo baseado na duração (1 chunk a cada ~8 min para garantir qualidade)
+        const durationBasedChunks = Math.max(1, Math.ceil(config.duration / 8));
 
-        // Se detectamos seções, usamos elas como guia principal, mas respeitando um mínimo de chunks
+        // Se temos seções claras, obedecemos a premissa. Se não, vamos pela duração.
         const numberOfChunks = detectedSections > 0 ? detectedSections : durationBasedChunks;
-
-        const targetWords = config.duration * 150; // Ajustado para 150 words/min (mais realista)
+        const targetWords = config.duration * 150;
         const wordsPerChunk = Math.ceil(targetWords / numberOfChunks);
 
-        console.log(`Planejamento: ${numberOfChunks} partes baseadas na premissa.`);
+        console.log(
+          `Planejamento: ${numberOfChunks} partes (Baseado em: ${detectedSections > 0 ? "Seções da Premissa" : "Duração Estimada"})`,
+        );
 
         setProgress({
           stage: "script",
@@ -116,13 +143,13 @@ export const useScriptGenerator = () => {
 
         let scriptContent = "";
         const scriptChunks: ScriptChunk[] = [];
-        let storyFinished = false; // Variável de controle de saída antecipada
+        let storyFinished = false;
 
         // 3. Loop de Geração
         for (let i = 0; i < numberOfChunks; i++) {
-          // Se a história já acabou na parte anterior, paramos IMEDIATAMENTE.
+          // 🛑 KILL SWITCH: Se a história acabou no loop anterior, PARE AGORA.
           if (storyFinished) {
-            console.log("História finalizada antecipadamente. Cancelando chunks restantes.");
+            console.log("🛑 História finalizada antecipadamente. Cancelando partes extras.");
             break;
           }
 
@@ -173,11 +200,11 @@ export const useScriptGenerator = () => {
           let cleanedChunk = sanitizeScriptUtils(chunkResult.content);
           cleanedChunk = cleanScriptRepetitions(cleanedChunk);
 
-          // DETECÇÃO DE FIM DE HISTÓRIA
-          // Se a IA escreveu [FIM] ou se estamos na última seção prevista e o texto parece conclusivo
-          if (cleanedChunk.includes("[FIM]") || i === numberOfChunks - 1) {
-            cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, ""); // Limpa a tag
-            storyFinished = true; // Impede o próximo loop
+          // 🔍 DETECÇÃO DE FIM DE HISTÓRIA (O segredo do sucesso)
+          // Verifica se tem tag [FIM] OU se tem frases de "Obrigado por assistir/Subskrybuj"
+          if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
+            cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "");
+            storyFinished = true; // Ativa a flag para não rodar o próximo loop
           }
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
@@ -191,11 +218,9 @@ export const useScriptGenerator = () => {
           });
         }
 
-        // 4. Montagem Final e Limpeza Global
+        // 4. Montagem e Limpeza Visual (Quebra de Parágrafos)
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
-
-        // AQUI APLICAMOS A QUEBRA DE PARÁGRAFOS GIGANTES
-        const cleanedFullScript = cleanFinalScript(joinedScript);
+        const cleanedFullScript = cleanFinalScript(joinedScript); // <--- Aqui chamamos a função que quebra parágrafos
 
         const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
