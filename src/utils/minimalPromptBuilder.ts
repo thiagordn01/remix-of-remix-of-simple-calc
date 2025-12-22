@@ -175,12 +175,12 @@ export function buildMinimalChunkPrompt(
   // Construir memória narrativa do que já foi escrito
   const memory = buildNarrativeMemory(previousContent || '', chunkIndex);
 
-  // ✅ NOVO: Construir Bíblia de Fatos para consistência
+  // ✅ Extrair fatos do texto JÁ GERADO (não da premissa)
+  // Isso mantém consistência de personagens/relações que a IA criou
   const factBible = buildFactBible(premise, previousContent || '');
   const factBibleBlock = formatFactBibleForPrompt(factBible, premise);
 
-  // Extrair dados da premissa
-  const bibleText = extractBible(premise);
+  // Extrair direção para esta parte da premissa
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   // Início do prompt - Instruções básicas
@@ -194,23 +194,10 @@ export function buildMinimalChunkPrompt(
 🌐 IDIOMA OBRIGATÓRIO: ${languageInstruction}
 `;
 
-  // ✅ BÍBLIA DE FATOS - PRIORIDADE MÁXIMA PARA CONSISTÊNCIA
-  // Vem ANTES de tudo para garantir que a IA respeite
-  if (factBibleBlock) {
+  // ✅ FATOS JÁ ESTABELECIDOS (apenas se houver texto anterior)
+  // Mostra personagens/relações que a própria IA já criou para manter consistência
+  if (factBibleBlock && chunkIndex > 0) {
     prompt += factBibleBlock;
-  } else if (bibleText) {
-    // Fallback: usar bíblia extraída do texto da premissa
-    prompt += `
-╔══════════════════════════════════════════════════════════════════╗
-║  📖 FATOS FIXOS DA HISTÓRIA - NÃO MUDE                           ║
-╚══════════════════════════════════════════════════════════════════╝
-
-${bibleText}
-
-⛔ REGRA CRÍTICA: Use EXATAMENTE estes nomes e relações.
-   NÃO invente nomes novos para personagens já estabelecidos.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
   }
 
   // Adicionar memória do que já foi escrito (se não for primeiro chunk)
@@ -255,7 +242,6 @@ ${userPrompt}
 ⚡ ESTA É A ABERTURA:
 - Comece de forma envolvente
 - Capture a atenção do espectador
-- Estabeleça os personagens com os nomes EXATOS da Bíblia de Fatos
 `;
   } else if (chunkIndex === totalChunks - 1) {
     prompt += `
@@ -263,7 +249,7 @@ ${userPrompt}
 - Conclua a narrativa
 - Não deixe pontas soltas
 - NÃO faça recapitulação/resumo do que aconteceu
-- Use os MESMOS nomes de personagens do início ao fim
+- Continue usando os MESMOS nomes de personagens
 `;
   } else {
     prompt += `
@@ -271,11 +257,11 @@ ${userPrompt}
 - Continue naturalmente
 - Mantenha o engajamento
 - NÃO faça introduções ou encerramentos
-- MANTENHA os nomes de personagens consistentes
+- Continue usando os MESMOS nomes de personagens
 `;
   }
 
-  // Regras técnicas finais com ênfase em consistência
+  // Regras técnicas finais
   prompt += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ REGRAS DE FORMATAÇÃO:
@@ -284,14 +270,21 @@ ${userPrompt}
 - NÃO use [TAGS], (instruções), *formatações*
 - NÃO faça meta-comentários sobre o texto
 - Termine em frase completa (com ponto final)
-
-⛔ REGRAS DE CONSISTÊNCIA (CRÍTICO):
-- Use EXATAMENTE os nomes de personagens já estabelecidos
-- NÃO mude relações (se X é irmã de Y, continua sendo irmã)
-- NÃO invente nomes novos para personagens existentes
-- Se mencionou "Maria" antes, NÃO mude para "Mariana" ou "Marta"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
 
+  // Regras de consistência apenas para chunks 2+
+  if (chunkIndex > 0) {
+    prompt += `
+⚠️ CONSISTÊNCIA (você já começou esta história):
+- Continue usando os MESMOS nomes de personagens
+- Mantenha as relações consistentes (irmã continua sendo irmã)
+- Não mude fatos já estabelecidos
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+  }
+
+  prompt += `
 Escreva o roteiro:
 `;
 

@@ -2,10 +2,11 @@
 /**
  * Sistema de "Bíblia de Fatos" - Mantém consistência de personagens, relações e fatos
  *
- * Problema resolvido: A IA estava mudando nomes, relações e fatos entre chunks.
- * Exemplo: Anna era "irmã" em um chunk e "amor" em outro.
+ * IMPORTANTE: Este sistema NÃO impõe nomes fixos!
+ * Ele EXTRAI os nomes/relações que A PRÓPRIA IA JÁ CRIOU no texto gerado
+ * e garante que ela continue usando os MESMOS nomes nos chunks seguintes.
  *
- * Solução: Extrair fatos fixos e OBRIGAR a IA a segui-los.
+ * Cada história é ÚNICA - os personagens vêm do prompt do usuário e da criação da IA.
  */
 
 export interface Character {
@@ -197,36 +198,54 @@ function extractLocations(text: string): string[] {
 }
 
 /**
- * Constrói a Bíblia de Fatos a partir da premissa e texto gerado
+ * Constrói a Bíblia de Fatos a partir do TEXTO JÁ GERADO
+ *
+ * IMPORTANTE: NÃO usa a premissa! A premissa é instrução, não conteúdo.
+ * Extrai apenas do texto que a IA já escreveu para manter consistência.
+ *
+ * Se não há texto gerado (primeiro chunk), retorna Bíblia vazia.
  */
 export function buildFactBible(premise: string, generatedText: string = ''): FactBible {
-  const fullText = premise + '\n' + generatedText;
+  // Se não há texto gerado, retornar vazio (primeiro chunk - IA ainda vai criar)
+  if (!generatedText || generatedText.trim().length < 50) {
+    return {
+      characters: [],
+      relationships: [],
+      timeline: [],
+      objects: [],
+      locations: [],
+      immutableFacts: []
+    };
+  }
 
+  // Extrair APENAS do texto já gerado pela IA
   return {
-    characters: extractCharacters(fullText),
-    relationships: extractRelationships(fullText),
-    timeline: extractTimeline(fullText),
-    objects: extractObjects(fullText),
-    locations: extractLocations(fullText),
+    characters: extractCharacters(generatedText),
+    relationships: extractRelationships(generatedText),
+    timeline: extractTimeline(generatedText),
+    objects: extractObjects(generatedText),
+    locations: extractLocations(generatedText),
     immutableFacts: []
   };
 }
 
 /**
  * Formata a Bíblia de Fatos para inclusão no prompt
- * Esta é a parte que a IA DEVE seguir
+ *
+ * IMPORTANTE: Estes são fatos que A PRÓPRIA IA JÁ CRIOU.
+ * O objetivo é manter consistência, não impor nomes fixos.
  */
 export function formatFactBibleForPrompt(bible: FactBible, premise: string): string {
-  // Se não encontrou fatos estruturados, extrair do texto da premissa
+  // Se não há fatos extraídos, não adicionar bloco (primeiro chunk)
   if (bible.characters.length === 0 && bible.relationships.length === 0) {
-    return formatPremiseAsBible(premise);
+    return '';
   }
 
   let block = `
 ╔══════════════════════════════════════════════════════════════════╗
-║  📖 BÍBLIA DE FATOS - VOCÊ DEVE SEGUIR EXATAMENTE                ║
+║  📖 PERSONAGENS E FATOS JÁ ESTABELECIDOS NA HISTÓRIA             ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  ⚠️ ESTES FATOS SÃO IMUTÁVEIS - NÃO MUDE NOMES OU RELAÇÕES      ║
+║  ⚠️ Você já criou estes personagens - continue usando os mesmos  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 `;
@@ -281,57 +300,14 @@ export function formatFactBibleForPrompt(bible: FactBible, premise: string): str
 
   block += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⛔ REGRAS CRÍTICAS:
-1. NÃO invente novos nomes para personagens já estabelecidos
-2. NÃO mude relações (se X é irmã, continua sendo irmã)
-3. NÃO contradiga fatos temporais (idades, datas)
-4. NÃO mude descrições de objetos importantes
-5. Se não tem certeza, consulte a premissa original
+⚠️ MANTENHA CONSISTÊNCIA:
+- Continue usando os MESMOS nomes que você já usou
+- Se chamou alguém de "irmã", continue chamando de "irmã"
+- Mantenha as idades e datas consistentes
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
   return block;
-}
-
-/**
- * Extrai informações da premissa como Bíblia quando não consegue estruturar
- */
-function formatPremiseAsBible(premise: string): string {
-  // Tentar encontrar seção [BIBLE] na premissa
-  const bibleMatch = premise.match(/\[BIBLE\]([\s\S]*?)\[\/BIBLE\]/i);
-  if (bibleMatch) {
-    return `
-╔══════════════════════════════════════════════════════════════════╗
-║  📖 BÍBLIA DE FATOS - VOCÊ DEVE SEGUIR EXATAMENTE                ║
-╚══════════════════════════════════════════════════════════════════╝
-
-${bibleMatch[1].trim()}
-
-⛔ NÃO mude nomes, relações ou fatos estabelecidos acima.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
-  }
-
-  // Extrair primeiras linhas da premissa que geralmente contêm fatos importantes
-  const lines = premise.split('\n').filter(l => l.trim().length > 10).slice(0, 15);
-  const importantLines = lines.filter(line =>
-    /(?:personagem|protagonista|vilão|nome|idade|anos|irmã|irmão|pai|mãe|filho|filha|local|cidade)/i.test(line)
-  );
-
-  if (importantLines.length > 0) {
-    return `
-╔══════════════════════════════════════════════════════════════════╗
-║  📖 FATOS DA PREMISSA - MANTENHA CONSISTÊNCIA                    ║
-╚══════════════════════════════════════════════════════════════════╝
-
-${importantLines.join('\n')}
-
-⛔ NÃO mude nomes, relações ou fatos estabelecidos acima.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
-  }
-
-  return '';
 }
 
 /**
