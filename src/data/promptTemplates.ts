@@ -6,8 +6,8 @@ export interface PromptTemplate {
 }
 
 const getNeutralPremise = (targetLanguage: string, culturalContext: string) => `
-ATENÇÃO: Você é um motor de estruturação de roteiros.
-Sua única função é organizar o PROMPT DO USUÁRIO em blocos lógicos.
+ATENÇÃO: Você é um arquiteto de histórias.
+Sua função é estruturar a ideia do usuário em blocos lógicos.
 
 ---
 PROMPT DO USUÁRIO:
@@ -20,21 +20,20 @@ CONFIGURAÇÕES:
 - IDIOMA: ${targetLanguage}
 - PÚBLICO: [localizacao]
 
-⚠️ INSTRUÇÃO TÉCNICA (CRÍTICO):
-Divida a resposta em blocos numerados usando a tag [SEÇÃO X].
+⚠️ INSTRUÇÃO TÉCNICA:
+Divida a resposta em [SEÇÃO X].
+Se a história for curta, use apenas 2 ou 3 seções. NÃO force 5 seções se não houver conteúdo.
 
-FORMATO DE SAÍDA OBRIGATÓRIO:
+FORMATO DE SAÍDA:
 
 [SEÇÃO 1]
-(Início da história/conteúdo)
+(Início...)
 
 [SEÇÃO 2]
-(Meio/Desenvolvimento)
+(Meio...)
 
 [SEÇÃO 3]
-(Final/Clímax e Conclusão)
-
-(Crie mais seções APENAS se o conteúdo for muito extenso).
+(Fim...)
 `;
 
 const getNeutralScript = (targetLanguage: string, culturalContext: string) => `
@@ -48,13 +47,16 @@ INSTRUÇÕES DO USUÁRIO:
 [prompt_usuario]
 """
 
-⚠️ REGRAS DE FORMATAÇÃO VISUAL (OBRIGATÓRIO):
-1. PARÁGRAFOS CURTOS: Use no máximo 2 ou 3 frases por parágrafo.
-2. ESPAÇAMENTO: Pule uma linha entre cada parágrafo.
-3. FLUIDEZ: Escreva como se fosse falado (natural).
+⚠️ REGRAS DE FORMATO VISUAL:
+1. Use parágrafos curtos (máximo 2-3 frases).
+2. Pule uma linha entre cada parágrafo.
 
-⚠️ REGRA DE FINALIZAÇÃO:
-Se esta for a última parte da história e você a concluiu, escreva a tag [FIM] no final do texto.
+🚨 REGRA DE OURO (ANTI-REPETIÇÃO):
+A meta de palavras é apenas uma sugestão.
+SE A HISTÓRIA ACABAR, PARE.
+NÃO repita a história para encher linguiça.
+NÃO reinicie a narrativa.
+Se terminar, escreva a tag: [FIM]
 `;
 
 export const defaultPrompts: Record<string, PromptTemplate> = {};
@@ -73,5 +75,5 @@ export function getDefaultPrompts(languageCode: string): PromptTemplate {
 export function getSystemInstructions(languageCode: string): string {
   const langObj = getLanguageByCode(languageCode);
   const langName = langObj ? langObj.name : languageCode;
-  return `Você é um roteirista expert. Escreva em ${langName}. Use parágrafos curtos.`;
+  return `Você é um roteirista expert em ${langName}. Priorize qualidade sobre quantidade. Se a história acabou, encerre.`;
 }

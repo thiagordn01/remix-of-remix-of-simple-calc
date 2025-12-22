@@ -15,36 +15,40 @@ import { cleanFinalScript, cleanScriptRepetitions } from "@/utils/scriptCleanup"
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
 
-// ✅ NOVO: Detector Semântico de Fim de História
-// Se a IA escrever qualquer uma dessas frases no final, paramos a geração IMEDIATAMENTE.
+// ✅ LISTA DE GATILHOS EXPANDIDA (Kill Switch)
 function hasEndingPhrases(text: string): boolean {
-  const lower = text.toLowerCase().slice(-500); // Olha só o finalzinho
+  const lower = text.toLowerCase().slice(-600); // Analisa os últimos 600 caracteres
   const endTriggers = [
-    // Tags explícitas
     "[fim]",
     "[the end]",
     "[fin]",
     "***",
-    // Português
+    // PT-BR
     "inscreva-se",
     "deixe seu like",
     "até a próxima",
     "obrigado por assistir",
     "nos vemos no próximo",
-    // Inglês
+    "esse foi o vídeo",
+    // EN
     "subscribe",
     "thanks for watching",
     "see you in the next",
     "don't forget to like",
-    // Polonês (Para seu caso específico)
+    // PL (Polonês - O Problema Atual)
     "subskrybuj",
     "do usłyszenia",
     "do zobaczenia",
     "dajcie znać w komentarzach",
     "oceniając ją w skali",
+    "dziękuję, że byłeś",
   ];
 
-  return endTriggers.some((trigger) => lower.includes(trigger));
+  const found = endTriggers.some((trigger) => lower.includes(trigger));
+  if (found) {
+    console.log("🛑 FIM DE HISTÓRIA DETECTADO (Kill Switch Ativado)");
+  }
+  return found;
 }
 
 export const useScriptGenerator = () => {
@@ -82,7 +86,7 @@ export const useScriptGenerator = () => {
         );
         if (provider === "gemini" && activeGeminiKeys.length === 0) throw new Error("Sem chaves Gemini ativas");
 
-        // 1. Gerar Premissa
+        // 1. Premissa
         setProgress({
           stage: "premise",
           currentChunk: 1,
@@ -113,29 +117,26 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // 2. Planejamento Inteligente
-        // Se a premissa tiver [SEÇÃO X], usamos isso como contagem REAL.
+        // 2. Planejamento de Chunks
         const sectionMatches = premise.match(/\[SEÇÃO\s*\d+\]/gi);
         const detectedSections = sectionMatches ? sectionMatches.length : 0;
-
-        // Mínimo de 1 chunk, Máximo baseado na duração (1 chunk a cada ~8 min para garantir qualidade)
         const durationBasedChunks = Math.max(1, Math.ceil(config.duration / 8));
 
-        // Se temos seções claras, obedecemos a premissa. Se não, vamos pela duração.
+        // Prioriza as seções da premissa. Se a premissa tem 3 seções, fazemos 3 chunks.
         const numberOfChunks = detectedSections > 0 ? detectedSections : durationBasedChunks;
-        const targetWords = config.duration * 150;
-        const wordsPerChunk = Math.ceil(targetWords / numberOfChunks);
 
-        console.log(
-          `Planejamento: ${numberOfChunks} partes (Baseado em: ${detectedSections > 0 ? "Seções da Premissa" : "Duração Estimada"})`,
-        );
+        // REDUZIMOS a meta de palavras por chunk para não forçar "encher linguiça"
+        const targetWordsTotal = config.duration * 140;
+        const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
+
+        console.log(`Planejamento: ${numberOfChunks} partes. Meta flexível: ~${wordsPerChunk} palavras/parte.`);
 
         setProgress({
           stage: "script",
           currentChunk: 1,
           totalChunks: numberOfChunks,
           completedWords: 0,
-          targetWords,
+          targetWords: targetWordsTotal,
           isComplete: false,
           percentage: 20,
           message: `Iniciando roteiro (${numberOfChunks} partes)...`,
@@ -145,11 +146,10 @@ export const useScriptGenerator = () => {
         const scriptChunks: ScriptChunk[] = [];
         let storyFinished = false;
 
-        // 3. Loop de Geração
+        // 3. Loop
         for (let i = 0; i < numberOfChunks; i++) {
-          // 🛑 KILL SWITCH: Se a história acabou no loop anterior, PARE AGORA.
           if (storyFinished) {
-            console.log("🛑 História finalizada antecipadamente. Cancelando partes extras.");
+            console.log("🛑 Cancelando partes restantes: História já finalizada.");
             break;
           }
 
@@ -158,7 +158,7 @@ export const useScriptGenerator = () => {
             currentChunk: i + 1,
             totalChunks: numberOfChunks,
             completedWords: scriptContent.split(/\s+/).length,
-            targetWords,
+            targetWords: targetWordsTotal,
             isComplete: false,
             percentage: 20 + (i / numberOfChunks) * 80,
             message: `Gerando parte ${i + 1}/${numberOfChunks}...`,
@@ -200,11 +200,10 @@ export const useScriptGenerator = () => {
           let cleanedChunk = sanitizeScriptUtils(chunkResult.content);
           cleanedChunk = cleanScriptRepetitions(cleanedChunk);
 
-          // 🔍 DETECÇÃO DE FIM DE HISTÓRIA (O segredo do sucesso)
-          // Verifica se tem tag [FIM] OU se tem frases de "Obrigado por assistir/Subskrybuj"
+          // DETECÇÃO DE FIM
           if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
             cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "");
-            storyFinished = true; // Ativa a flag para não rodar o próximo loop
+            storyFinished = true;
           }
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
@@ -218,10 +217,8 @@ export const useScriptGenerator = () => {
           });
         }
 
-        // 4. Montagem e Limpeza Visual (Quebra de Parágrafos)
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
-        const cleanedFullScript = cleanFinalScript(joinedScript); // <--- Aqui chamamos a função que quebra parágrafos
-
+        const cleanedFullScript = cleanFinalScript(joinedScript);
         const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
         const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
@@ -250,7 +247,7 @@ export const useScriptGenerator = () => {
           currentChunk: numberOfChunks,
           totalChunks: numberOfChunks,
           completedWords: totalWords,
-          targetWords,
+          targetWords: totalWords,
           isComplete: true,
           percentage: 100,
         });
