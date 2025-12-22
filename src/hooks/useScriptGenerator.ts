@@ -144,12 +144,14 @@ export const useScriptGenerator = () => {
             premise: premise,
             chunkIndex: i,
             totalChunks: numberOfChunks,
+            // ✅ CORREÇÃO: Passar previousContent para memória narrativa
+            previousContent: i > 0 ? scriptContent : undefined,
             lastParagraph: i > 0 && lastParagraph ? lastParagraph : undefined,
           });
 
           const chunkContext = {
             premise,
-            previousContent: "",
+            previousContent: scriptContent,
             chunkIndex: i,
             totalChunks: numberOfChunks,
             targetWords: wordsPerChunk,

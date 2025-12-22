@@ -617,10 +617,10 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           let chunkPrompt: string;
           
           if (USE_MINIMAL_PROMPT) {
-            // ✅ NOVO: Sistema minimalista (~600 chars de sistema vs ~4000)
+            // ✅ Sistema com memória narrativa - passa contexto completo
             const lastParagraph = extractLastParagraph(script);
             const anchors = extractSemanticAnchors(script);
-            
+
             chunkPrompt = buildMinimalChunkPrompt(scriptPromptProcessed, {
               title: job.title,
               language: detectedLanguage,
@@ -628,12 +628,14 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
               premise: premise,
               chunkIndex: i,
               totalChunks: numberOfChunks,
+              // ✅ CORREÇÃO CRÍTICA: Passar o texto já gerado para memória narrativa
+              previousContent: i > 0 ? script : undefined,
               lastParagraph: i > 0 ? lastParagraph : undefined,
               anchors: i > 0 ? anchors : undefined
             });
-            
+
             if (i === 0) {
-              addLog(jobId, `🆕 Usando sistema "Prompt Invisível" (minimalista)`);
+              addLog(jobId, `🆕 Usando sistema com memória narrativa`);
             }
           } else {
             // Sistema antigo (verboso)
@@ -739,7 +741,9 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
                   targetWords: chunkTargetWords,
                   premise: premise,
                   chunkIndex: i,
-                  totalChunks: numberOfChunks
+                  totalChunks: numberOfChunks,
+                  // ✅ CORREÇÃO: Passar previousContent para memória narrativa
+                  previousContent: i > 0 ? script : undefined
                 },
                 validation.duplicatedSample
               );
