@@ -1,5 +1,5 @@
 // ✅ src/utils/minimalPromptBuilder.ts
-// Versão corrigida com todas as exportações necessárias para evitar erros de TS2305
+// Versão Final - Sem dependências externas conflitantes
 
 export interface MinimalChunkContext {
   title: string;
@@ -12,6 +12,7 @@ export interface MinimalChunkContext {
   anchors?: string[];
 }
 
+// Lista interna para evitar erros de importação circular
 const LANGUAGE_NAMES: Record<string, string> = {
   "pt-BR": "Português Brasileiro",
   "pt-PT": "Português",
@@ -24,12 +25,15 @@ const LANGUAGE_NAMES: Record<string, string> = {
   "ja-JP": "Japanese",
   "ru-RU": "Russian",
   "zh-CN": "Chinese",
+  "pl-PL": "Polski",
 };
 
 /**
- * Extrai seção específica da premissa
+ * 1. Extrai seção específica da premissa
+ * Evita que o Chunk 2 leia a premissa do Chunk 1
  */
 function extractPremiseSection(premise: string, sectionNumber: number): string {
+  // Regex flexível: aceita [SEÇÃO 1], [BLOCO 1], PART 1, etc.
   const sectionRegex = new RegExp(
     `(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b[^\\n]*([\\s\\S]*?)(?=(?:[\\[\\(]?)?\\b(?:SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*\\d+|$)`,
     "i",
@@ -37,28 +41,33 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
 
   const match = premise.match(sectionRegex);
   if (match) {
+    // Retorna o conteúdo limpo da seção
     return match[1].replace(/^[:\-\s]+/, "").trim();
   }
 
-  // Fallback
+  // Fallback: Divisão por parágrafos duplos (Caso a IA esqueça as tags)
   const paragraphs = premise.split(/\n\n+/).filter((p) => p.trim().length > 0);
   if (paragraphs.length >= 3) {
     const totalAvailable = paragraphs.length;
+    // Lógica proporcional para distribuir o conteúdo
     if (sectionNumber === 1) return paragraphs.slice(0, Math.ceil(totalAvailable * 0.3)).join("\n\n");
     if (sectionNumber === 2)
       return paragraphs.slice(Math.ceil(totalAvailable * 0.3), Math.ceil(totalAvailable * 0.7)).join("\n\n");
     return paragraphs.slice(Math.ceil(totalAvailable * 0.7)).join("\n\n");
   }
 
+  // Último recurso: retorna tudo (mas isso é raro se o Template estiver certo)
   return premise;
 }
 
 /**
- * Constrói o prompt "blindado" contra repetições
+ * 2. Constrói o Prompt Blindado
  */
 export function buildMinimalChunkPrompt(userPrompt: string, context: MinimalChunkContext): string {
   const { title, language, targetWords, premise, chunkIndex, totalChunks, lastParagraph } = context;
   const languageName = LANGUAGE_NAMES[language] || language;
+
+  // Extrai APENAS a parte da premissa relevante para agora
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   let prompt = `
@@ -79,12 +88,14 @@ ESTILO (Do Usuário):
 """
 ${userPrompt}
 """
-(Ignore "Comece com..." se não for a Parte 1)
+(Ignore instruções de "Comece com..." se esta não for a Parte 1)
 
 `;
 
+  // --- TRAVA DE SEGURANÇA ANTI-DUPLICAÇÃO ---
   if (chunkIndex > 0 && lastParagraph) {
-    // Usamos um contexto curto para evitar "gagueira"
+    // Pegamos apenas as últimas 20 palavras.
+    // Se enviarmos o parágrafo todo, a IA tenta reescrevê-lo (efeito eco).
     const words = lastParagraph.trim().split(/\s+/);
     const shortContext = words.slice(-20).join(" ");
 
@@ -102,7 +113,7 @@ A parte anterior terminou com: "...${shortContext}"
   }
 
   if (chunkIndex === totalChunks - 1) {
-    prompt += `\nINSTRUÇÃO: Parte Final. Faça o desfecho.\n`;
+    prompt += `\nINSTRUÇÃO: Parte Final. Caminhe para o desfecho definitivo. Não reinicie a história.\n`;
   }
 
   prompt += `\nEscreva APENAS o roteiro da Parte ${chunkIndex + 1}:\n`;
@@ -110,7 +121,7 @@ A parte anterior terminou com: "...${shortContext}"
   return prompt;
 }
 
-// --- FUNÇÕES AUXILIARES RESTAURADAS PARA CORRIGIR ERROS DE IMPORTAÇÃO ---
+// --- FUNÇÕES AUXILIARES NECESSÁRIAS (Para evitar erros no console) ---
 
 export function extractLastParagraph(text: string): string {
   if (!text) return "";
@@ -119,16 +130,16 @@ export function extractLastParagraph(text: string): string {
 }
 
 export function extractSemanticAnchors(text: string): string[] {
-  return [];
+  return []; // Placeholder para manter compatibilidade
 }
 
 export function detectParagraphDuplication(text: string, prev: string): any {
-  return { hasDuplication: false };
+  return { hasDuplication: false }; // Placeholder
 }
 
 /**
  * Sanitiza o script removendo metadados e tags de produção.
- * Restaurada para satisfazer imports em chunkValidation.ts e promptInjector.ts
+ * (Restaurado para que outros arquivos possam importar)
  */
 export function sanitizeScript(text: string): string {
   let sanitized = text;
@@ -137,16 +148,14 @@ export function sanitizeScript(text: string): string {
     /\[(?:IMAGEM|IMAGEN|IMAGE|MÚSICA|MUSIC|SFX|CENA|SCENE|SOUND|IMG|FOTO|PHOTO|EFEITO|EFFECT)[:\s][^\]]*\]/gi,
     "",
   );
-  // Remove instruções de direção em maiúsculas
+  // Remove instruções de direção em maiúsculas (ex: [RISE MUSIC])
   sanitized = sanitized.replace(/\[[A-Z][A-Z\s]{2,30}:[^\]]*\]/g, "");
   // Limpeza de espaços
   sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+  sanitized = sanitized.replace(/^\s*\n/, "");
   return sanitized.trim();
 }
 
-/**
- * Gera prompt de emergência (Restaurada)
- */
 export function buildEmergencyPrompt(userPrompt: string, context: MinimalChunkContext, duplicatedText: string): string {
   return `
 ERRO: Você repetiu o texto anterior: "${duplicatedText.slice(0, 50)}...".
@@ -155,9 +164,6 @@ NÃO REPITA O CONTEXTO.
   `;
 }
 
-/**
- * Formata parágrafos para narração (Restaurada)
- */
 export function formatParagraphsForNarration(text: string): string {
   return text
     .split("\n")
