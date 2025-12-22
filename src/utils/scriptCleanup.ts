@@ -1,49 +1,10 @@
 // ✅ src/utils/scriptCleanup.ts
 
 /**
- * Corta o texto se encontrar frases de encerramento.
- * Isso impede que a IA diga "Tchau" e depois comece a história de novo.
+ * Utilitários para limpeza e formatação de guiões.
  */
-export function truncateAfterEnding(text: string): { cleaned: string; found: boolean } {
-  const lower = text.toLowerCase();
 
-  const endTriggers = [
-    // Tags
-    "[fim]",
-    "***",
-    // Polonês
-    "do usłyszenia w kolejnej",
-    "do zobaczenia w kolejnej",
-    "subskrybuj kanał",
-    "zasubskrybuj kanał",
-    "dziękuję, że byłeś",
-    // Português
-    "inscreva-se no canal",
-    "até a próxima",
-    "obrigado por assistir",
-    "deixe seu like",
-    // Inglês
-    "thanks for watching",
-    "subscribe to the channel",
-    "see you next time",
-  ];
-
-  for (const trigger of endTriggers) {
-    const index = lower.lastIndexOf(trigger);
-    if (index !== -1) {
-      // Pega o texto até a frase de fim + um pouco de margem e corta o resto
-      const cutPoint = Math.min(text.length, index + trigger.length + 50);
-      return {
-        cleaned: text.slice(0, cutPoint), // Corta o lixo pós-final
-        found: true,
-      };
-    }
-  }
-
-  return { cleaned: text, found: false };
-}
-
-// Quebra parágrafos gigantes nos pontos finais
+// Quebra parágrafos gigantes em menores baseados em pontuação
 function breakHugeParagraphs(text: string): string {
   return text
     .split("\n")
@@ -55,11 +16,34 @@ function breakHugeParagraphs(text: string): string {
     .join("\n");
 }
 
+/**
+ * Corta o texto APENAS se encontrar a tag técnica de fim.
+ * NÃO corta mais por palavras como "Obrigado" ou "Subscreva".
+ */
+export function truncateAfterEnding(text: string): { cleaned: string; found: boolean } {
+  // Agora confiamos apenas em tags explícitas para não cortar CTAs legítimos
+  const endTriggers = ["[FIM]", "[THE END]", "[FIN]"];
+
+  for (const trigger of endTriggers) {
+    // Busca case-insensitive
+    const index = text.toUpperCase().lastIndexOf(trigger);
+    if (index !== -1) {
+      // Corta exatamente onde a tag começa, removendo a tag e o lixo depois
+      return {
+        cleaned: text.slice(0, index).trim(),
+        found: true,
+      };
+    }
+  }
+
+  return { cleaned: text, found: false };
+}
+
 export function cleanScriptRepetitions(text: string): string {
   if (!text) return "";
   let cleaned = text;
 
-  // 1. Remove repetição exata de blocos
+  // 1. Remove repetição exata de blocos (A. A.)
   const echoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
   cleaned = cleaned.replace(echoRegex, "$1");
 
@@ -74,22 +58,23 @@ export function cleanFinalScript(text: string): string {
   if (!text) return "";
   let result = text;
 
-  // Remove Markdown e Metadados
+  // Limpezas básicas de Markdown
   result = result
     .replace(/\*\*/g, "")
-    .replace(/\[.*?\]/g, "")
+    .replace(/\[.*?\]/g, "") // Remove tags restantes (como [Música])
     .replace(/^\s*[\-\*]\s+/gm, "")
     .replace(/#{1,6}\s?/g, "");
 
+  // Remove títulos gerados pela IA
   const metaTitles = [/^Título:.*$/im, /^Roteiro:.*$/im, /^Parte \d+.*$/im, /^Capítulo \d+.*$/im];
   metaTitles.forEach((regex) => {
     result = result.replace(regex, "");
   });
 
-  // Aplica as limpezas lógicas
+  // Aplica limpeza de repetições (gaguez)
   result = cleanScriptRepetitions(result);
 
-  // Aplica a quebra visual de parágrafos (Anti-Wall of Text)
+  // Aplica quebra visual de parágrafos
   result = breakHugeParagraphs(result);
 
   return result.replace(/\n{3,}/g, "\n\n").trim();

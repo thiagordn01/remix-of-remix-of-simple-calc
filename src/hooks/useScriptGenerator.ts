@@ -15,6 +15,16 @@ import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
 
+// ✅ CORREÇÃO: O Kill Switch agora é estrito.
+// Só dispara com tags técnicas, permitindo CTAs (Like/Subscreva) no texto.
+function hasEndingPhrases(text: string): boolean {
+  const upper = text.toUpperCase();
+  // Apenas tags que a IA usa para sinalizar "Acabei tecnicamente"
+  const endTriggers = ["[FIM]", "[THE END]", "[FIN]"];
+
+  return endTriggers.some((trigger) => upper.includes(trigger));
+}
+
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<ScriptGenerationProgress | null>(null);
@@ -81,23 +91,18 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // 2. PARSE INTELIGENTE DE CAPÍTULOS (O FIM DA DUPLICAÇÃO)
-        // Contamos quantas vezes [CAPITULO X] ou [SEÇÃO X] aparece.
+        // 2. PARSE INTELIGENTE (ESTRUTURA)
         const chapterMatches = premise.match(/\[(?:CAPITULO|SEÇÃO|SECTION|PART)\s*\d+\]/gi);
         const detectedChapters = chapterMatches ? chapterMatches.length : 0;
-
-        // Fallback: Se o regex falhar, usamos uma estimativa conservadora (1 a cada 8 min), mas com teto de 3.
         const fallbackChunks = Math.max(1, Math.ceil(config.duration / 8));
 
-        // Se detectamos capítulos, usamos ESTRITAMENTE esse número.
+        // Usa o número de capítulos detetados na premissa
         const numberOfChunks = detectedChapters > 0 ? detectedChapters : fallbackChunks;
-
-        // Meta de palavras suave
         const targetWordsTotal = config.duration * 140;
         const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
 
         console.log(
-          `ESTRUTURA DETECTADA: ${numberOfChunks} Capítulos (baseado em ${detectedChapters > 0 ? "Premissa" : "Tempo"}).`,
+          `ESTRUTURA: ${numberOfChunks} Capítulos (baseado em ${detectedChapters > 0 ? "Premissa" : "Tempo"}).`,
         );
 
         setProgress({
@@ -117,10 +122,7 @@ export const useScriptGenerator = () => {
 
         // 3. LOOP DE GERAÇÃO
         for (let i = 0; i < numberOfChunks; i++) {
-          if (storyFinished) {
-            console.log("🛑 História finalizada antecipadamente. Loop interrompido.");
-            break;
-          }
+          if (storyFinished) break;
 
           setProgress({
             stage: "script",
@@ -166,19 +168,23 @@ export const useScriptGenerator = () => {
                   console.log,
                 );
 
-          // Limpeza básica
           let rawChunk = sanitizeScriptUtils(chunkResult.content);
           let cleanedChunk = cleanScriptRepetitions(rawChunk);
 
-          // VERIFICAÇÃO DE FIM DE HISTÓRIA ("GILOTINA")
+          // VERIFICAÇÃO DE TAG DE FIM
+          // Se a IA colocar [FIM], cortamos ali e paramos o loop.
           const truncation = truncateAfterEnding(cleanedChunk);
 
           if (truncation.found) {
-            console.log("✂️ Final detectado no meio do texto. Cortando excesso e encerrando.");
-            cleanedChunk = truncation.cleaned;
-            storyFinished = true; // Impede a próxima iteração do loop
-          } else if (i === numberOfChunks - 1) {
-            storyFinished = true; // Último capítulo do loop
+            console.log("🏁 Tag [FIM] detectada. Encerrando história.");
+            cleanedChunk = truncation.cleaned; // Mantém o texto ANTES da tag (incluindo CTAs)
+            storyFinished = true;
+          } else if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
+            // Se detectou tag [FIM] sem truncar ou é o último chunk
+            if (hasEndingPhrases(cleanedChunk)) {
+              cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "").replace(/\[THE END\]/gi, "");
+              storyFinished = true;
+            }
           }
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
@@ -192,12 +198,9 @@ export const useScriptGenerator = () => {
           });
         }
 
-        // 4. LIMPEZA FINAL E MONTAGEM
+        // 4. LIMPEZA FINAL
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
-
-        // Aqui aplicamos a QUEBRA DE PARÁGRAFOS GIGANTES (Visual)
         const cleanedFullScript = cleanFinalScript(joinedScript);
-
         const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
         const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
@@ -231,7 +234,7 @@ export const useScriptGenerator = () => {
           percentage: 100,
         });
 
-        toast({ title: "Roteiro gerado com sucesso!", description: `${totalWords} palavras.` });
+        toast({ title: "Guião gerado com sucesso!", description: `${totalWords} palavras.` });
 
         return finalResult;
       } catch (error) {
