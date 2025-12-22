@@ -11,45 +11,9 @@ import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
 import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from "@/utils/promptInjector";
-import { cleanFinalScript, cleanScriptRepetitions } from "@/utils/scriptCleanup";
+import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
-
-// ✅ LISTA DE GATILHOS EXPANDIDA (Kill Switch)
-function hasEndingPhrases(text: string): boolean {
-  const lower = text.toLowerCase().slice(-600); // Analisa os últimos 600 caracteres
-  const endTriggers = [
-    "[fim]",
-    "[the end]",
-    "[fin]",
-    "***",
-    // PT-BR
-    "inscreva-se",
-    "deixe seu like",
-    "até a próxima",
-    "obrigado por assistir",
-    "nos vemos no próximo",
-    "esse foi o vídeo",
-    // EN
-    "subscribe",
-    "thanks for watching",
-    "see you in the next",
-    "don't forget to like",
-    // PL (Polonês - O Problema Atual)
-    "subskrybuj",
-    "do usłyszenia",
-    "do zobaczenia",
-    "dajcie znać w komentarzach",
-    "oceniając ją w skali",
-    "dziękuję, że byłeś",
-  ];
-
-  const found = endTriggers.some((trigger) => lower.includes(trigger));
-  if (found) {
-    console.log("🛑 FIM DE HISTÓRIA DETECTADO (Kill Switch Ativado)");
-  }
-  return found;
-}
 
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -86,7 +50,7 @@ export const useScriptGenerator = () => {
         );
         if (provider === "gemini" && activeGeminiKeys.length === 0) throw new Error("Sem chaves Gemini ativas");
 
-        // 1. Premissa
+        // 1. GERAR PREMISSA
         setProgress({
           stage: "premise",
           currentChunk: 1,
@@ -117,19 +81,24 @@ export const useScriptGenerator = () => {
 
         const premise = premiseResult.content;
 
-        // 2. Planejamento de Chunks
-        const sectionMatches = premise.match(/\[SEÇÃO\s*\d+\]/gi);
-        const detectedSections = sectionMatches ? sectionMatches.length : 0;
-        const durationBasedChunks = Math.max(1, Math.ceil(config.duration / 8));
+        // 2. PARSE INTELIGENTE DE CAPÍTULOS (O FIM DA DUPLICAÇÃO)
+        // Contamos quantas vezes [CAPITULO X] ou [SEÇÃO X] aparece.
+        const chapterMatches = premise.match(/\[(?:CAPITULO|SEÇÃO|SECTION|PART)\s*\d+\]/gi);
+        const detectedChapters = chapterMatches ? chapterMatches.length : 0;
 
-        // Prioriza as seções da premissa. Se a premissa tem 3 seções, fazemos 3 chunks.
-        const numberOfChunks = detectedSections > 0 ? detectedSections : durationBasedChunks;
+        // Fallback: Se o regex falhar, usamos uma estimativa conservadora (1 a cada 8 min), mas com teto de 3.
+        const fallbackChunks = Math.max(1, Math.ceil(config.duration / 8));
 
-        // REDUZIMOS a meta de palavras por chunk para não forçar "encher linguiça"
+        // Se detectamos capítulos, usamos ESTRITAMENTE esse número.
+        const numberOfChunks = detectedChapters > 0 ? detectedChapters : fallbackChunks;
+
+        // Meta de palavras suave
         const targetWordsTotal = config.duration * 140;
         const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
 
-        console.log(`Planejamento: ${numberOfChunks} partes. Meta flexível: ~${wordsPerChunk} palavras/parte.`);
+        console.log(
+          `ESTRUTURA DETECTADA: ${numberOfChunks} Capítulos (baseado em ${detectedChapters > 0 ? "Premissa" : "Tempo"}).`,
+        );
 
         setProgress({
           stage: "script",
@@ -139,17 +108,17 @@ export const useScriptGenerator = () => {
           targetWords: targetWordsTotal,
           isComplete: false,
           percentage: 20,
-          message: `Iniciando roteiro (${numberOfChunks} partes)...`,
+          message: `Gerando ${numberOfChunks} capítulos...`,
         });
 
         let scriptContent = "";
         const scriptChunks: ScriptChunk[] = [];
         let storyFinished = false;
 
-        // 3. Loop
+        // 3. LOOP DE GERAÇÃO
         for (let i = 0; i < numberOfChunks; i++) {
           if (storyFinished) {
-            console.log("🛑 Cancelando partes restantes: História já finalizada.");
+            console.log("🛑 História finalizada antecipadamente. Loop interrompido.");
             break;
           }
 
@@ -161,7 +130,7 @@ export const useScriptGenerator = () => {
             targetWords: targetWordsTotal,
             isComplete: false,
             percentage: 20 + (i / numberOfChunks) * 80,
-            message: `Gerando parte ${i + 1}/${numberOfChunks}...`,
+            message: `Escrevendo Capítulo ${i + 1}/${numberOfChunks}...`,
           });
 
           const lastParagraph = scriptContent ? extractLastParagraph(scriptContent) : "";
@@ -197,13 +166,19 @@ export const useScriptGenerator = () => {
                   console.log,
                 );
 
-          let cleanedChunk = sanitizeScriptUtils(chunkResult.content);
-          cleanedChunk = cleanScriptRepetitions(cleanedChunk);
+          // Limpeza básica
+          let rawChunk = sanitizeScriptUtils(chunkResult.content);
+          let cleanedChunk = cleanScriptRepetitions(rawChunk);
 
-          // DETECÇÃO DE FIM
-          if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
-            cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "");
-            storyFinished = true;
+          // VERIFICAÇÃO DE FIM DE HISTÓRIA ("GILOTINA")
+          const truncation = truncateAfterEnding(cleanedChunk);
+
+          if (truncation.found) {
+            console.log("✂️ Final detectado no meio do texto. Cortando excesso e encerrando.");
+            cleanedChunk = truncation.cleaned;
+            storyFinished = true; // Impede a próxima iteração do loop
+          } else if (i === numberOfChunks - 1) {
+            storyFinished = true; // Último capítulo do loop
           }
 
           scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
@@ -217,8 +192,12 @@ export const useScriptGenerator = () => {
           });
         }
 
+        // 4. LIMPEZA FINAL E MONTAGEM
         const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
+
+        // Aqui aplicamos a QUEBRA DE PARÁGRAFOS GIGANTES (Visual)
         const cleanedFullScript = cleanFinalScript(joinedScript);
+
         const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
 
         const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
