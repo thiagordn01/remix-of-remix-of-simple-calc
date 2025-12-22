@@ -132,13 +132,26 @@ export function detectParagraphDuplication(
   // Lógica simplificada para não depender de narrativeMemory complexo
   if (!previousText || !newText) return { hasDuplication: false };
 
-  const newParagraphs = newText.split("\n\n");
   const prevParagraphs = previousText.split("\n\n");
-  const lastPrev = prevParagraphs[prevParagraphs.length - 1];
+  const lastPrev = prevParagraphs[prevParagraphs.length - 1]?.trim();
+  if (!lastPrev) return { hasDuplication: false };
 
-  // Se o começo do novo texto for igual ao final do anterior
-  if (newText.trim().startsWith(lastPrev.trim())) {
+  const trimmedNew = newText.trim();
+
+  // 1) Se o começo do novo texto for igual ao final do anterior (parágrafo inteiro)
+  if (trimmedNew.startsWith(lastPrev)) {
     return { hasDuplication: true, duplicatedText: lastPrev };
+  }
+
+  // 2) Verificar duplicação pela última frase do parágrafo anterior
+  const sentences = lastPrev.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  const lastSentence = sentences[sentences.length - 1];
+  if (!lastSentence) return { hasDuplication: false };
+
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/["'“”„”]/g, "").trim();
+
+  if (normalize(trimmedNew).startsWith(normalize(lastSentence))) {
+    return { hasDuplication: true, duplicatedText: lastSentence };
   }
 
   return { hasDuplication: false };
