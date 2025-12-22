@@ -359,6 +359,7 @@ export const useScriptGenerator = () => {
               language: detectedLanguage,
               location: config.location,
               isLastChunk: i === totalParts - 1,
+              simpleMode: true,
             } as const;
 
             const partResult =
