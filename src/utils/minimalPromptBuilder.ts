@@ -13,7 +13,6 @@ export interface MinimalChunkContext {
 
 const LANGUAGE_NAMES: Record<string, string> = {
   "pt-BR": "Português Brasileiro",
-  "pt-PT": "Português",
   "en-US": "English",
   "es-ES": "Español",
   "fr-FR": "Français",
@@ -25,6 +24,17 @@ const LANGUAGE_NAMES: Record<string, string> = {
   "zh-CN": "Chinese",
 };
 
+/**
+ * Extrai a "Bíblia" (Dados fixos) da premissa.
+ */
+function extractBible(premise: string): string {
+  const match = premise.match(/\[BIBLE\]([\s\S]*?)\[\/BIBLE\]/i);
+  return match ? match[1].trim() : "Mantenha consistência com o contexto anterior.";
+}
+
+/**
+ * Extrai o capítulo específico.
+ */
 function extractPremiseSection(premise: string, sectionNumber: number): string {
   const sectionRegex = new RegExp(
     `(?:[\\[\\(]?)?\\b(?:CAPITULO|CHAPTER|SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*${sectionNumber}\\b[^\\n]*([\\s\\S]*?)(?=(?:[\\[\\(]?)?\\b(?:CAPITULO|CHAPTER|SEÇÃO|SECAO|SECTION|BLOCO|BLOCK|PARTE|PART)\\s*\\d+|$)`,
@@ -34,33 +44,33 @@ function extractPremiseSection(premise: string, sectionNumber: number): string {
   const match = premise.match(sectionRegex);
   if (match) return match[1].replace(/^[:\-\s]+/, "").trim();
 
-  const paragraphs = premise.split(/\n\n+/).filter((p) => p.trim().length > 0);
-  if (paragraphs.length >= 3) {
-    const totalAvailable = paragraphs.length;
-    if (sectionNumber === 1) return paragraphs.slice(0, Math.ceil(totalAvailable * 0.33)).join("\n\n");
-    if (sectionNumber === 2)
-      return paragraphs.slice(Math.ceil(totalAvailable * 0.33), Math.ceil(totalAvailable * 0.66)).join("\n\n");
-    return paragraphs.slice(Math.ceil(totalAvailable * 0.66)).join("\n\n");
-  }
-  return premise;
+  // Fallback se a estrutura falhar
+  return "Continue a história de onde parou.";
 }
 
 export function buildMinimalChunkPrompt(userPrompt: string, context: MinimalChunkContext): string {
   const { title, language, targetWords, premise, chunkIndex, totalChunks, lastParagraph } = context;
   const languageName = LANGUAGE_NAMES[language] || language;
+
+  const bible = extractBible(premise);
   const sectionContent = extractPremiseSection(premise, chunkIndex + 1);
 
   let prompt = `
-ATUE COMO: Roteirista Profissional (Narrativa Contínua).
-TAREFA: Escrever a parte ${chunkIndex + 1} de ${totalChunks}.
+ATUE COMO: Roteirista de Série Contínua.
+TAREFA: Escrever o CAPÍTULO ${chunkIndex + 1} de ${totalChunks}.
 
-DADOS:
+DADOS DO PROJETO:
 - Título: "${title}"
 - Idioma: ${languageName}
-- Meta: ~${targetWords} palavras
+- Palavras Alvo: ~${targetWords}
 
 ---
-EVENTOS DESTA PARTE (O que acontece agora):
+📘 BÍBLIA DA HISTÓRIA (DADOS IMUTÁVEIS):
+${bible}
+(Use estes nomes e fatos. Não invente novos.)
+---
+
+🎬 O QUE ACONTECE NESTE CAPÍTULO (Siga APENAS isto):
 ${sectionContent}
 ---
 
@@ -71,43 +81,42 @@ ${userPrompt}
 
 `;
 
-  // --- LÓGICA DE CONTINUIDADE AJUSTADA ---
+  // --- TRAVAS DE CONTINUIDADE ---
 
   if (chunkIndex === 0) {
-    // PARTE 1: PODE TER INTRODUÇÃO
-    prompt += `\nINSTRUÇÃO: Este é o início. Comece a história imediatamente.\n`;
+    prompt += `\nINSTRUÇÃO: Este é o INÍCIO. Apresente os personagens e o incidente inicial.\n`;
   } else if (chunkIndex < totalChunks - 1) {
-    // PARTE DO MEIO: PROIBIDO TER INTRO/OUTRO
     prompt += `
-⚠️ INSTRUÇÃO CRÍTICA (MEIO DA HISTÓRIA):
-1. Esta é uma continuação direta. NÃO faça introduções como "Bem-vindos de volta".
-2. NÃO faça conclusões como "Inscreva-se para ver a parte 3".
-3. NÃO resuma o que aconteceu antes.
-4. Apenas continue a narrativa como se fosse um único texto longo.
+⚠️ INSTRUÇÃO DE MEIO (CRÍTICO):
+1. Este texto será colado logo após o capítulo anterior.
+2. NÃO faça introduções ("Bem-vindos de volta").
+3. NÃO faça resumos ("Anteriormente...").
+4. NÃO faça encerramentos ("Inscreva-se").
+5. NÃO resolva a história ainda. Foque no desenvolvimento descrito acima.
 `;
   } else {
-    // ÚLTIMA PARTE: DEVE ENCERRAR
-    prompt += `\nINSTRUÇÃO: Este é o FINAL. Encerre a história de forma satisfatória e definitiva.\n`;
+    prompt += `\nINSTRUÇÃO: Este é o FINAL. Agora sim, resolva todos os conflitos e encerre a história.\n`;
   }
 
   if (chunkIndex > 0 && lastParagraph) {
     const words = lastParagraph.trim().split(/\s+/);
-    const shortContext = words.slice(-20).join(" ");
+    const shortContext = words.slice(-25).join(" ");
 
     prompt += `
-🔗 CONTINUIDADE:
-O texto anterior terminou com: "...${shortContext}"
+🔗 CONEXÃO PERFEITA:
+O capítulo anterior terminou EXATAMENTE com:
+"...${shortContext}"
 
-➡️ Comece IMEDIATAMENTE a partir daqui, completando a ação ou pensamento.
+➡️ Comece sua frase completando a ação acima ou iniciando a próxima imediata. Não repita o texto.
 `;
   }
 
-  prompt += `\nEscreva agora o roteiro da Parte ${chunkIndex + 1}:\n`;
+  prompt += `\nEscreva o roteiro do Capítulo ${chunkIndex + 1} (Sem títulos, apenas narração):\n`;
 
   return prompt;
 }
 
-// Funções auxiliares
+// Funções auxiliares mantidas
 export function extractLastParagraph(text: string): string {
   if (!text) return "";
   const paras = text.split(/\n\n+/);
