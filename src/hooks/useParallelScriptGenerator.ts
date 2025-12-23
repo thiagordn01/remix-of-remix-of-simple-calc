@@ -4,16 +4,14 @@ import { Agent } from '@/types/agents';
 import { GeminiApiKey, AIProvider } from '@/types/scripts';
 import { enhancedGeminiService } from '../services/enhancedGeminiApi';
 import { puterDeepseekService } from '../services/puterDeepseekService';
-import { replacePlaceholders } from '../utils/placeholderUtils';
 import { getLanguageFromTitleOrDefault, detectLanguageFromTitle } from '../utils/languageDetection';
 import { ScriptGenerationRequest, ScriptGenerationProgress } from '@/types/scripts';
-import { 
-  injectPremiseContext, 
-  buildChunkPrompt, 
-  buildMinimalChunkPrompt, 
-  extractSemanticAnchors, 
-  detectParagraphDuplication, 
-  sanitizeScript, 
+import {
+  buildChunkPrompt,
+  buildMinimalChunkPrompt,
+  extractSemanticAnchors,
+  detectParagraphDuplication,
+  sanitizeScript,
   extractLastParagraph,
   buildEmergencyPrompt,
   formatParagraphsForNarration
@@ -377,45 +375,37 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         });
         
         addLog(jobId, `📝 Iniciando geração de premissa...`);
-        
-        const premisePromptRaw = replacePlaceholders(agent.premisePrompt || '', {
-          title: job.title,
-          titulo: job.title,
-          channelName: agent.channelName || 'Canal',
-          canal: agent.channelName || 'Canal',
-          language: detectedLanguage,
-          idioma: detectedLanguage,
-          location: agent.location || 'Brasil',
-          localizacao: agent.location || 'Brasil',
-          duration: agent.duration || 10,
-          duracao: agent.duration || 10
-        });
-        
-        const premisePrompt = injectPremiseContext(premisePromptRaw, {
-          title: job.title,
-          channelName: agent.channelName || 'Canal',
-          duration: agent.duration || 10,
-          language: detectedLanguage,
-          location: agent.location || 'Brasil'
-        });
 
-        const premiseWordTarget = 0; // Sem meta rígida de palavras para premissa (controle 100% via prompt)
-        addLog(jobId, premiseWordTarget
-          ? `📊 Meta de palavras para premissa (opcional): ${premiseWordTarget}`
-          : '📊 Premissa sem meta rígida de palavras (modelo igual ao sistema de referência)'
-        );
+        // Prompt de premissa igual ao sistema de referência
+        // Inclui contexto de localização e idioma para variação
+        const premisePrompt = `
+          Atue como um Roteirista de Cinema Expert localizado em: ${agent.location || 'Brasil'}.
+          Idioma de saída: ${detectedLanguage}.
+          OBJETIVO: Criar a 'Bíblia' da história (Premissa) antes do roteiro.
+          REGRAS DE FORMATAÇÃO:
+          - NÃO use Markdown de negrito (**) em excesso.
+          - NÃO inclua metadados como "Data", "Autor" ou "Versão".
+          - Apenas entregue o texto da premissa.
+          - IMPORTANTE: Seja CRIATIVO e ORIGINAL. Cada história deve ser ÚNICA.
+
+          Título do Vídeo: ${job.title}
+
+          Instruções para a Premissa: ${agent.premisePrompt || ''}
+        `;
+
+        addLog(jobId, '📊 Premissa com contexto de localização e idioma para variação');
 
         // Gerar premissa usando o provider correto
         const premiseResult = job.provider === 'deepseek'
           ? await puterDeepseekService.generatePremise(
               premisePrompt,
-              premiseWordTarget || undefined,
+              undefined,
               onProgress
             )
           : await enhancedGeminiService.generatePremise(
               premisePrompt,
               availableApisForJob,
-              premiseWordTarget || undefined,
+              undefined,
               onProgress
             );
 
@@ -452,20 +442,8 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
       addLog(jobId, `🎬 Iniciando geração de roteiro...`);
 
-      const scriptPromptProcessed = replacePlaceholders(agent.scriptPrompt || '', {
-        title: job.title,
-        titulo: job.title,
-        premise: premise,
-        premissa: premise,
-        channelName: agent.channelName || 'Canal',
-        canal: agent.channelName || 'Canal',
-        language: detectedLanguage,
-        idioma: detectedLanguage,
-        location: agent.location || 'Brasil',
-        localizacao: agent.location || 'Brasil',
-        duration: agent.duration || 10,
-        duracao: agent.duration || 10
-      });
+      // Prompt de roteiro direto (sem placeholders, igual sistema de referência)
+      const scriptPromptProcessed = agent.scriptPrompt || '';
 
       // Calcular palavras alvo para o roteiro baseado na duração
       const duration = agent.duration || 10; // minutos
@@ -491,9 +469,8 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         const totalWordsTarget = duration * wpm;
         const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
-        // Seleciona primeira API disponível para esta sessão de chat
-        const selectedApiKey = availableApisForJob[0];
-        if (!selectedApiKey) {
+        // Verifica se há APIs disponíveis
+        if (availableApisForJob.length === 0) {
           throw new Error('Nenhuma API key disponível para chat');
         }
 
@@ -521,14 +498,15 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
         // Cria sessão de chat única para todo o roteiro
         // IMPORTANTE: A IA vê TUDO que já escreveu - mantém memória automaticamente
+        // Passa TODAS as APIs disponíveis para rotação automática em caso de erro 429
         const chatSessionId = `job-${jobId}-${Date.now()}`;
-        geminiChatService.createChat(chatSessionId, selectedApiKey, {
+        geminiChatService.createChat(chatSessionId, availableApisForJob, {
           systemInstruction: scriptSystemInstruction,
           maxOutputTokens: 8192,
           temperature: 0.9
         });
 
-        addLog(jobId, `💬 Sessão de chat criada: ${chatSessionId} (API: ${selectedApiKey.name})`);
+        addLog(jobId, `💬 Sessão de chat criada: ${chatSessionId} (${availableApisForJob.length} APIs disponíveis para rotação)`);
 
         let scriptContentFull = script;
 
