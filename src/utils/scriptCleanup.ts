@@ -77,14 +77,11 @@ export function cleanScriptRepetitions(text: string): string {
   if (!text) return "";
   let cleaned = text;
 
-  // 1. Remove CTAs repetitivos no meio do texto
-  cleaned = removeRepeatedCTAs(cleaned);
-
-  // 2. Remove repetição exata de blocos
+  // 1. Remove repetição exata de blocos
   const echoRegex = /([^\n.!?]{15,}[.!?])\s*\1/g;
   cleaned = cleaned.replace(echoRegex, "$1");
 
-  // 3. Remove repetição de início
+  // 2. Remove repetição de início
   const startEchoRegex = /^([^\.!?]{10,}[.!?])\s*\1/i;
   cleaned = cleaned.replace(startEchoRegex, "$1");
 
