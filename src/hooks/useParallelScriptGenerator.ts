@@ -469,7 +469,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
       // Calcular palavras alvo para o roteiro baseado na duração
       const duration = agent.duration || 10; // minutos
-      const wordsPerMinute = 170;
+      const wordsPerMinute = 150;
       const targetWords = duration * wordsPerMinute;
       
       addLog(jobId, `📊 Meta de palavras para roteiro: ${targetWords} (${duration} min de duração)`);
@@ -485,7 +485,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
       if (job.provider === 'gemini' && duration <= 60) {
         addLog(jobId, `🟢 Usando CHAT COM HISTÓRICO PERSISTENTE (duration=${duration} min)`);
 
-        const wpm = 170;
+        const wpm = 150;
         const minutesPerPart = 10;
         const totalParts = Math.max(1, Math.ceil(duration / minutesPerPart));
         const totalWordsTarget = duration * wpm;
