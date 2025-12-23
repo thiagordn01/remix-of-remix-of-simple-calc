@@ -596,8 +596,23 @@ const ScriptGeneratorWithModals: React.FC<ScriptGeneratorWithModalsProps> = ({ o
                         {job.error && (
                           <p className="text-red-500">❌ {job.error}</p>
                         )}
+                        {job.status === 'error' && job.usedApiIds && job.usedApiIds.length > 0 && (
+                          (() => {
+                            const lastApiId = job.usedApiIds[job.usedApiIds.length - 1];
+                            const apiInfo = activeApiKeys.find((api) => api.id === lastApiId);
+                            if (!apiInfo) return null;
+                            return (
+                              <p>
+                                🔑 Última API usada: <span className="font-semibold">{apiInfo.name}</span>{' '}
+                                <span className="text-muted-foreground">({apiInfo.model})</span>
+                              </p>
+                            );
+                          })()
+                        )}
                         {job.endTime && (
-                          <p>⏱️ Concluído em {Math.round((job.endTime.getTime() - job.startTime.getTime()) / 1000)}s</p>
+                          <p>
+                            ⏱️ Concluído em {Math.round((job.endTime.getTime() - job.startTime.getTime()) / 1000)}s
+                          </p>
                         )}
                       </div>
                     )}
