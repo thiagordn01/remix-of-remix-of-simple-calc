@@ -6,17 +6,19 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Key, TestTube, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader2, Upload } from 'lucide-react';
+import { Plus, Trash2, Key, TestTube, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader2, Upload, Clock } from 'lucide-react';
 import { GeminiApiKey } from '@/types/scripts';
 import { useGeminiKeys } from '@/hooks/useGeminiKeys';
 import { GeminiApiService } from '@/services/geminiApi';
+import { enhancedGeminiService } from '@/services/enhancedGeminiApi';
 import { useToast } from '@/hooks/use-toast';
 import { ApiBatchModal } from '@/components/ApiBatchModal';
-import { ApiStatusMonitor } from '@/components/ApiStatusMonitor';
+import { useGeminiApiStatuses, ApiStatus } from '@/hooks/useGeminiApiStatuses';
 
 export const GeminiApiManager = () => {
   const { apiKeys, addApiKey, addMultipleApiKeys, removeApiKey, toggleApiKey, updateApiKey } = useGeminiKeys();
   const { toast } = useToast();
+  const { apiStatuses } = useGeminiApiStatuses(apiKeys);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
@@ -214,6 +216,94 @@ export const GeminiApiManager = () => {
     }
   };
 
+  const getInternalStatusBadge = (status?: ApiStatus) => {
+    if (!status) return null;
+
+    if (!status.isAvailable) {
+      if (status.blockReason) {
+        return (
+          <Badge variant="destructive" className="flex items-center gap-1">
+            <XCircle className="w-3 h-3" />
+            Bloqueada
+          </Badge>
+        );
+      }
+      if (status.isExhausted) {
+        return (
+          <Badge variant="destructive" className="flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            Exaurida (RPD)
+          </Badge>
+        );
+      }
+    }
+
+    if (status.isInCooldown) {
+      return (
+        <Badge variant="secondary" className="flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          Cooldown (RPM)
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="default" className="flex items-center gap-1 bg-success">
+        <CheckCircle className="w-3 h-3" />
+        Disponível
+      </Badge>
+    );
+  };
+
+  const getInternalStatusDetails = (status?: ApiStatus) => {
+    if (!status) return null;
+
+    const limits = enhancedGeminiService.getModelLimitsPublic(status.model);
+    const rpmMax = limits.rpm;
+    const rpdMax = limits.rpd;
+
+    const rpmDisplay = `${status.rpm ?? 0}/${rpmMax}`;
+    const rpdDisplay = `${status.rpd ?? 0}/${rpdMax}`;
+
+    if (status.blockReason) {
+      return (
+        <div className="mt-1">
+          <p className="text-xs text-destructive">{status.blockReason}</p>
+          <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
+        </div>
+      );
+    }
+
+    if (status.isExhausted) {
+      return (
+        <div className="mt-1">
+          <p className="text-xs text-destructive">
+            Limite diário atingido ({rpdMax} req/dia). Reset: 00:00 UTC
+          </p>
+          <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
+        </div>
+      );
+    }
+
+    if (status.isInCooldown) {
+      return (
+        <div className="mt-1">
+          <p className="text-xs text-muted-foreground">
+            Limite de {rpmMax} req/min atingido. Aguarde ~30s
+          </p>
+          <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-1">
+        <p className="text-xs text-muted-foreground">Pronta para uso</p>
+        <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
+      </div>
+    );
+  };
+
   const activeApiKeys = apiKeys.filter(key => 
     key.isActive && 
     key.status !== 'suspended' &&
@@ -308,17 +398,6 @@ export const GeminiApiManager = () => {
         </div>
       </div>
 
-      {/* Monitor de Status em Tempo Real */}
-      {apiKeys.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold">Monitor em tempo real das APIs</h3>
-          <p className="text-sm text-muted-foreground">
-            Aqui você vê o que o sistema está fazendo AGORA com cada chave (disponível, cooldown, limite diário e bloqueios internos).
-          </p>
-          <ApiStatusMonitor apiKeys={apiKeys} />
-        </div>
-      )}
- 
       {/* Estatísticas e Cadastro de APIs */}
       <div className="space-y-4 mt-6">
         <div className="space-y-1">
@@ -369,89 +448,108 @@ export const GeminiApiManager = () => {
  
       {/* Lista de API Keys */}
       <div className="space-y-4">
-        {apiKeys.map((apiKey) => (
-          <Card key={apiKey.id} className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
-            <CardContent className="p-6 bg-gradient-to-r from-card to-card/50">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold">{apiKey.name}</h3>
-                    {getStatusBadge(apiKey.status)}
-                    <Badge variant="outline">{apiKey.model}</Badge>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      {getStatusIcon(apiKey.status)}
-                      <span>{apiKey.statusMessage || 'Não testada'}</span>
+        {apiKeys.map((apiKey) => {
+          const internalStatus = apiStatuses.find((status) => status.id === apiKey.id);
+
+          return (
+            <Card
+              key={apiKey.id}
+              className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300"
+            >
+              <CardContent className="p-6 bg-gradient-to-r from-card to-card/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold">{apiKey.name}</h3>
+                      {getStatusBadge(apiKey.status)}
+                      <Badge variant="outline">{apiKey.model}</Badge>
                     </div>
-                    <span>Requests: {apiKey.requestCount}</span>
-                    {apiKey.lastUsed && (
-                      <span>Último uso: {apiKey.lastUsed.toLocaleString('pt-BR')}</span>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-muted-foreground">API Key:</span>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {showKeys.has(apiKey.id) 
-                        ? apiKey.key 
-                        : `${apiKey.key.slice(0, 8)}...${apiKey.key.slice(-4)}`
-                      }
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleKeyVisibility(apiKey.id)}
-                    >
-                      {showKeys.has(apiKey.id) ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          {getStatusIcon(apiKey.status)}
+                          <span>{apiKey.statusMessage || 'Não testada'}</span>
+                        </div>
+                        <span>Requests: {apiKey.requestCount}</span>
+                        {apiKey.lastUsed && (
+                          <span>Último uso: {apiKey.lastUsed.toLocaleString('pt-BR')}</span>
+                        )}
+                      </div>
+
+                      {internalStatus && (
+                        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Status interno do gerador:</span>
+                            {getInternalStatusBadge(internalStatus)}
+                          </div>
+                          {getInternalStatusDetails(internalStatus)}
+                        </div>
                       )}
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-muted-foreground">API Key:</span>
+                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                        {showKeys.has(apiKey.id)
+                          ? apiKey.key
+                          : `${apiKey.key.slice(0, 8)}...${apiKey.key.slice(-4)}`}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleKeyVisibility(apiKey.id)}
+                      >
+                        {showKeys.has(apiKey.id) ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleApiKey(apiKey.id)}
+                      className={
+                        apiKey.isActive
+                          ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200 hover:text-green-900 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900/50'
+                          : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
+                      }
+                    >
+                      {apiKey.isActive ? 'Ativa' : 'Inativa'}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleValidateApiKey(apiKey)}
+                      disabled={validatingKeys.has(apiKey.id)}
+                    >
+                      {validatingKeys.has(apiKey.id) ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <TestTube className="w-4 h-4" />
+                      )}
+                      <span className="ml-1">Teste rápido</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteApiKey(apiKey)}
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleApiKey(apiKey.id)}
-                    className={apiKey.isActive
-                      ? 'bg-green-100 border-green-300 text-green-800 hover:bg-green-200 hover:text-green-900 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900/50'
-                      : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
-                    }
-                  >
-                    {apiKey.isActive ? 'Ativa' : 'Inativa'}
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleValidateApiKey(apiKey)}
-                    disabled={validatingKeys.has(apiKey.id)}
-                  >
-                    {validatingKeys.has(apiKey.id) ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <TestTube className="w-4 h-4" />
-                    )}
-                    <span className="ml-1">Teste rápido</span>
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteApiKey(apiKey)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {apiKeys.length === 0 && (
