@@ -116,8 +116,12 @@ export const ApiStatusMonitor = ({ apiKeys, onRefresh }: ApiStatusMonitorProps) 
   };
 
   const getStatusDetails = (status: ApiStatus) => {
-    const rpmDisplay = status.rpm !== undefined ? `${status.rpm}/2` : '0/2';
-    const rpdDisplay = status.rpd !== undefined ? `${status.rpd}/50` : '0/50';
+    const limits = enhancedGeminiService.getModelLimitsPublic(status.model);
+    const rpmMax = limits.rpm;
+    const rpdMax = limits.rpd;
+
+    const rpmDisplay = `${status.rpm ?? 0}/${rpmMax}`;
+    const rpdDisplay = `${status.rpd ?? 0}/${rpdMax}`;
 
     if (status.blockReason) {
       return (
@@ -132,7 +136,7 @@ export const ApiStatusMonitor = ({ apiKeys, onRefresh }: ApiStatusMonitorProps) 
       return (
         <div className="mt-1">
           <p className="text-xs text-destructive">
-            Limite diário atingido (50 req/dia). Reset: 00:00 UTC
+            Limite diário atingido ({rpdMax} req/dia). Reset: 00:00 UTC
           </p>
           <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
         </div>
@@ -143,7 +147,7 @@ export const ApiStatusMonitor = ({ apiKeys, onRefresh }: ApiStatusMonitorProps) 
       return (
         <div className="mt-1">
           <p className="text-xs text-muted-foreground">
-            Limite de 2 req/min atingido. Aguarde ~30s
+            Limite de {rpmMax} req/min atingido. Aguarde ~30s
           </p>
           <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
         </div>
