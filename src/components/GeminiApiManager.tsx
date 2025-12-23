@@ -310,48 +310,63 @@ export const GeminiApiManager = () => {
 
       {/* Monitor de Status em Tempo Real */}
       {apiKeys.length > 0 && (
-        <ApiStatusMonitor apiKeys={apiKeys} />
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Monitor em tempo real das APIs</h3>
+          <p className="text-sm text-muted-foreground">
+            Aqui você vê o que o sistema está fazendo AGORA com cada chave (disponível, cooldown, limite diário e bloqueios internos).
+          </p>
+          <ApiStatusMonitor apiKeys={apiKeys} />
+        </div>
       )}
-
-      {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="shadow-golden hover:shadow-golden-lg transition-all duration-300 border-golden-200 dark:border-golden-800">
-          <CardContent className="p-6 bg-gradient-to-br from-golden-50 to-amber-50/50 dark:from-golden-950/30 dark:to-amber-950/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium">Total de APIs</p>
-                <p className="text-4xl font-bold mt-2 bg-gradient-to-r from-golden-600 to-amber-600 dark:from-golden-400 dark:to-amber-400 bg-clip-text text-transparent">{apiKeys.length}</p>
+ 
+      {/* Estatísticas e Cadastro de APIs */}
+      <div className="space-y-4 mt-6">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold">Cadastro e testes das APIs</h3>
+          <p className="text-sm text-muted-foreground">
+            Nesta seção você gerencia o cadastro das chaves, ativa/desativa e roda testes rápidos. Os números abaixo são históricos de uso, diferentes dos limites RPM/RPD do monitor.
+          </p>
+        </div>
+ 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="shadow-golden hover:shadow-golden-lg transition-all duration-300 border-golden-200 dark:border-golden-800">
+            <CardContent className="p-6 bg-gradient-to-br from-golden-50 to-amber-50/50 dark:from-golden-950/30 dark:to-amber-950/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground font-medium">Total de APIs</p>
+                  <p className="text-4xl font-bold mt-2 bg-gradient-to-r from-golden-600 to-amber-600 dark:from-golden-400 dark:to-amber-400 bg-clip-text text-transparent">{apiKeys.length}</p>
+                </div>
+                <Key className="w-12 h-12 text-golden-500/40 dark:text-golden-400/40" />
               </div>
-              <Key className="w-12 h-12 text-golden-500/40 dark:text-golden-400/40" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
-          <CardContent className="p-6 bg-gradient-to-br from-success/5 to-transparent">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium">APIs Ativas</p>
-                <p className="text-4xl font-bold mt-2 text-success">{activeApiKeys.length}</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
+            <CardContent className="p-6 bg-gradient-to-br from-success/5 to-transparent">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground font-medium">APIs Ativas</p>
+                  <p className="text-4xl font-bold mt-2 text-success">{activeApiKeys.length}</p>
+                </div>
+                <CheckCircle className="w-12 h-12 text-success/40" />
               </div>
-              <CheckCircle className="w-12 h-12 text-success/40" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
-          <CardContent className="p-6 bg-gradient-to-br from-info/5 to-transparent">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium">Total de Requests</p>
-                <p className="text-4xl font-bold mt-2 text-info">{apiKeys.reduce((sum, key) => sum + key.requestCount, 0)}</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
+            <CardContent className="p-6 bg-gradient-to-br from-info/5 to-transparent">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground font-medium">Total de Requests</p>
+                  <p className="text-4xl font-bold mt-2 text-info">{apiKeys.reduce((sum, key) => sum + key.requestCount, 0)}</p>
+                </div>
+                <TestTube className="w-12 h-12 text-info/40" />
               </div>
-              <TestTube className="w-12 h-12 text-info/40" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
+ 
       {/* Lista de API Keys */}
       <div className="space-y-4">
         {apiKeys.map((apiKey) => (
@@ -422,7 +437,7 @@ export const GeminiApiManager = () => {
                     ) : (
                       <TestTube className="w-4 h-4" />
                     )}
-                    Testar
+                    <span className="ml-1">Teste rápido</span>
                   </Button>
                   
                   <Button
