@@ -39,6 +39,7 @@ interface GenerationContext {
   language?: string;
   location?: string;
   isLastChunk?: boolean;
+  simpleMode?: boolean;
 }
 
 export class EnhancedGeminiService {
@@ -1545,22 +1546,43 @@ export class EnhancedGeminiService {
       availableApis,
       context,
       {
-        temperature: 0.7,
+        temperature: 0.9,
         maxRetries: 3,
         timeoutMs: timeoutForChunk,
         maxTokens: maxTokensForChunk,
         onProgress,
         validateResponse: (response) => {
-          // ✅ NOVA VALIDAÇÃO FORTE - Detectar meta-conteúdo e respostas curtas
+          // ✅ Validação de resposta: modo simples (chat único) vs modo avançado
           const texto = response?.trim() || '';
 
-          // 1. Verificar tamanho mínimo
-          const words = texto.split(/\s+/).filter(w => w.length > 0);
-          const minWords = context.isLastChunk ? 150 : 200; // Último chunk pode ser menor
+          // 1. Contar palavras uma vez para ambos os modos
+          const words = texto.split(/\s+/).filter((w) => w.length > 0);
+          const isSimple = context.simpleMode === true;
 
-          if (words.length < minWords) {
-            console.warn(`⚠️ Resposta muito curta: ${words.length} palavras (mínimo: ${minWords})`);
-            return false;
+          if (isSimple) {
+            // 🔹 MODO SIMPLES: validação LEVE — só rejeita respostas praticamente vazias ou lixo óbvio
+            if (words.length < 10) {
+              console.warn(`⚠️ [simpleMode] Resposta quase vazia: ${words.length} palavras`);
+              return false;
+            }
+          } else {
+            // 🔹 MODO AVANÇADO: manter validação forte baseada em meta de palavras
+            let minWords: number;
+
+            if (context.targetWords && context.targetWords > 0) {
+              // Exigir ~40% da meta, limitado a 200, com piso por tipo de chunk
+              const frac = Math.round(context.targetWords * 0.4);
+              const baseMin = context.isLastChunk ? 80 : 120;
+              minWords = Math.min(200, Math.max(baseMin, frac));
+            } else {
+              // Sem meta explícita -> valores padrão mais suaves
+              minWords = context.isLastChunk ? 80 : 120;
+            }
+
+            if (words.length < minWords) {
+              console.warn(`⚠️ Resposta muito curta: ${words.length} palavras (mínimo: ${minWords})`);
+              return false;
+            }
           }
 
           // 2. Detectar meta-conteúdo (explicações sobre o que a IA está fazendo)
@@ -1580,7 +1602,7 @@ export class EnhancedGeminiService {
             /^ok,?\s+vou/i,
             /roteiro está completo conforme/i,
             /violaria a estrutura/i,
-            /instrução de não repetir/i
+            /instrução de não repetir/i,
           ];
 
           for (const pattern of metaPatterns) {

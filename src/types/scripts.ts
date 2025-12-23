@@ -1,52 +1,65 @@
+// src/types/scripts.ts
+
+export type AIProvider = "gemini" | "deepseek" | "openai";
+
+export interface ScriptGenerationRequest {
+  title: string;
+  channelName?: string;
+  premisePrompt?: string;
+  scriptPrompt?: string;
+  duration?: number; // em minutos
+  language?: string;
+  location?: string;
+  /** Identificador do agente selecionado (para tracking/analytics) */
+  agentId?: string;
+  /** Meta opcional de palavras para a premissa */
+  premiseWordTarget?: number;
+}
+
 export interface GeminiApiKey {
   id: string;
-  name: string;
   key: string;
-  model: 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-3-flash-preview';
+  /** Nome legível da chave (exibido na UI) */
+  name?: string;
+  /** Modelo associado (ex: gemini-2.0-flash) */
+  model?: string;
   isActive: boolean;
-  requestCount: number;
-  lastUsed?: Date;
-  status?: 'valid' | 'invalid' | 'suspended' | 'rate_limited' | 'unknown' | 'checking';
+  /**
+   * Status operacional da chave. Inclui estados extras usados pela UI
+   * (valid, unknown, rate_limited, checking) além dos estados persistidos.
+   */
+  status?:
+    | "active"
+    | "suspended"
+    | "quota_exceeded"
+    | "invalid"
+    | "unknown"
+    | "valid"
+    | "rate_limited"
+    | "checking";
+  lastUsed?: number;
+  errorCount?: number;
+  provider?: AIProvider;
+  /** Contador de requisições usado em monitores de status */
+  requestCount?: number;
+  /** Mensagem de status para exibição na UI */
   statusMessage?: string;
+  /** Timestamp da última validação bem-sucedida na UI */
   lastValidated?: Date;
 }
 
 export interface DeepseekApiKey {
   id: string;
-  name: string;
   key: string;
-  model: 'deepseek-chat' | 'deepseek-reasoner';
+  name?: string;
+  model?: string;
   isActive: boolean;
-  requestCount: number;
-  lastUsed?: Date;
-  status?: 'valid' | 'invalid' | 'suspended' | 'rate_limited' | 'unknown' | 'checking';
+  status?: "active" | "suspended" | "quota_exceeded" | "invalid" | "unknown" | "valid" | "rate_limited" | "checking";
+  lastUsed?: number;
+  errorCount?: number;
+  provider?: AIProvider;
+  requestCount?: number;
   statusMessage?: string;
-  lastValidated?: Date;
-}
-
-export type AIProvider = 'gemini' | 'deepseek';
-
-export interface ScriptGenerationRequest {
-  title: string;
-  agentId?: string; // Se fornecido, usa as configurações do agente
-  // Campos opcionais que podem ser sobrescritos mesmo com agente
-  channelName?: string;
-  premisePrompt?: string;
-  scriptPrompt?: string;
-  premiseWordTarget?: number; // alvo técnico de palavras para premissa (opcional)
-  duration?: number; // em minutos
-  language?: string;
-  location?: string;
-}
-
-
-export interface ScriptGenerationResult {
-  premise: string;
-  script: string[];
-  chunks: ScriptChunk[];
-  totalWords: number;
-  estimatedDuration: number;
-  agentUsed?: string; // Nome do agente usado
 }
 
 export interface ScriptChunk {
@@ -55,43 +68,58 @@ export interface ScriptChunk {
   wordCount: number;
   chunkIndex: number;
   isComplete: boolean;
+  audioUrl?: string;
+  duration?: number;
+}
+
+export interface ScriptGenerationResult {
+  premise: string;
+  script: string[];
+  chunks: ScriptChunk[];
+  totalWords: number;
+  estimatedDuration: number;
+  agentUsed?: string;
 }
 
 export interface ScriptGenerationProgress {
-  stage: 'premise' | 'script';
+  stage: "premise" | "script" | "audio";
   currentChunk: number;
   totalChunks: number;
   completedWords: number;
   targetWords: number;
   isComplete: boolean;
   percentage: number;
-  currentApiKey?: string;
   message?: string;
 }
 
-export interface BatchScriptRequest {
-  titles: string[];
-  agentId?: string;
-  batchSettings: {
-    delayBetweenItems: number;
-    delayBetweenChunks: number;
-    maxRetries: number;
-    autoSaveToHistory: boolean;
-  };
+// === NOVOS TIPOS PARA O SISTEMA DE ESTADO VIVO ===
+
+/**
+ * Representa o estado lógico de um personagem em um momento específico
+ */
+export interface CharacterState {
+  name: string;
+  age: number; // Idade MATEMÁTICA atual
+  location: string; // Onde ele está agora
+  status: string; // O que está fazendo (ex: "correndo", "dormindo")
+  role: string; // Função imutável (ex: "garçom", "pai")
+  items: string[]; // Itens que carrega
 }
 
-export interface BatchScriptResult {
-  title: string;
-  result: ScriptGenerationResult | null;
-  error?: string;
-  status: 'pending' | 'generating' | 'completed' | 'error';
-  progress?: ScriptGenerationProgress;
+/**
+ * O Estado do Mundo que deve ser validado a cada chunk
+ */
+export interface WorldState {
+  currentYear: number; // Ano atual na história
+  timeElapsed: string; // Tempo decorrido desde o início (ex: "2 horas")
+  characters: Record<string, CharacterState>; // Mapa de personagens
+  keyFacts: string[]; // Fatos imutáveis acumulados
 }
 
-export interface SrtConfig {
-  blockDurationSeconds: number;
-  blockIntervalMs: number;
-  maxCharsPerBlock: number;
-  minWordsPerBlock: number;
-  maxWordsPerBlock: number;
+/**
+ * A resposta obrigatória da IA (JSON + Texto)
+ */
+export interface StructuredScriptResponse {
+  script_content: string; // O texto narrativo do roteiro
+  world_state_update: WorldState; // A atualização do estado
 }

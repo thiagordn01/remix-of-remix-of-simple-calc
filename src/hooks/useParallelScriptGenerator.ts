@@ -475,7 +475,131 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
       let script = job.script || ''; // Preservar script parcial
       let scriptWordCount = script.split(/\s+/).filter(w => w.length > 0).length;
-      
+
+      // ✅ NOVO: Para roteiros de até 60 minutos com Gemini, usar MODO SIMPLES em chat único
+      if (job.provider === 'gemini' && duration <= 60) {
+        addLog(jobId, `🟢 Usando modo simples em chat único (duration=${duration} min, provider=gemini)`);
+
+        const wpm = 170; // palavras por minuto
+        const minutesPerPart = 10; // ~10 minutos por parte
+        const totalParts = Math.max(1, Math.ceil(duration / minutesPerPart));
+        const totalWordsTarget = duration * wpm;
+        const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
+
+        let scriptContentFull = script;
+
+        for (let i = 0; i < totalParts; i++) {
+          const partNumber = i + 1;
+
+          updateJob(jobId, {
+            currentChunk: partNumber,
+            totalChunks: totalParts,
+            progress: 35 + (i / totalParts) * 55,
+          });
+
+          addLog(
+            jobId,
+            i === 0
+              ? `✍️ Escrevendo primeira parte (${partNumber}/${totalParts}) em modo simples (chat único)...`
+              : `📖 Continuando história (parte ${partNumber}/${totalParts}) em modo simples (chat único)...`
+          );
+
+          // Estrutura interna mental (copiada do modo simples do useScriptGenerator)
+          let structureInstruction = '';
+          if (partNumber === 1) {
+            structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
+            1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
+            2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
+            3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
+            `;
+          } else if (partNumber === totalParts) {
+            structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+            1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
+            2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
+            3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
+            `;
+          } else {
+            structureInstruction = `
+            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+            1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
+            2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
+            3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
+            `;
+          }
+
+          // Prompt simples com contexto acumulado
+          let partPrompt = `${scriptPromptProcessed}\n\n`;
+
+          if (i === 0) {
+            // Primeira parte: inclui premissa aprovada e título
+            partPrompt += `CONTEXTO (PREMISSA APROVADA):\n${premise}\n\n`;
+            partPrompt += `TÍTULO: ${job.title}\n\n`;
+          } else {
+            // Partes seguintes: enviar tudo o que já foi escrito
+            partPrompt += `Aqui está TUDO o que você já escreveu até agora do roteiro (NÃO repita nada disso, apenas continue):\n\n`;
+            partPrompt += `${scriptContentFull}\n\n`;
+            partPrompt += `Agora continue a história exatamente do ponto onde parou.\n\n`;
+          }
+
+          partPrompt += `ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.\n\n`;
+          partPrompt += `META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.\n\n`;
+          partPrompt += `${structureInstruction}\n\n`;
+          partPrompt += `INSTRUÇÕES DO USUÁRIO: ${scriptPromptProcessed}\n\n`;
+          partPrompt += `LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.\n`;
+          if (i === totalParts - 1) {
+            partPrompt += `Esta é a parte FINAL. Feche todos os arcos, entregue um final emocionalmente forte e NÃO deixe ganchos abertos.\n`;
+          }
+
+          partPrompt += `\nRegras gerais IMPORTANTES:\n`;
+          partPrompt += `- NÃO use Markdown, títulos ou listas.\n`;
+          partPrompt += `- NÃO repita frases inteiras já usadas, especialmente no começo de parágrafos.\n`;
+          partPrompt += `- NÃO faça comentários meta (não fale sobre "roteiro", "vídeo" ou "história" como se estivesse fora dela).\n`;
+
+          const context = {
+            premise,
+            previousContent: i > 0 ? scriptContentFull : undefined,
+            chunkIndex: i,
+            totalChunks: totalParts,
+            targetWords: wordsPerPart,
+            language: detectedLanguage,
+            location: agent.location || 'Brasil',
+            isLastChunk: i === totalParts - 1,
+            simpleMode: true,
+          } as const;
+
+          const partResult = await enhancedGeminiService.generateScriptChunk(
+            partPrompt,
+            availableApisForJob,
+            context,
+            onProgress
+          );
+
+          let rawPart = sanitizeScript(partResult.content || '').trim();
+          if (!rawPart) {
+            addLog(jobId, `⚠️ Parte ${partNumber}/${totalParts} veio vazia no modo simples. Pulando...`);
+            continue;
+          }
+
+          // Registrar API usada e marcar como em uso global
+          const jobAfterPart = jobsRef.current.find(j => j.id === jobId);
+          const usedApiIdsForPart = [...(jobAfterPart?.usedApiIds || []), partResult.usedApiId];
+          globalApisInUse.current.add(partResult.usedApiId);
+          updateJob(jobId, { usedApiIds: usedApiIdsForPart });
+          addLog(jobId, `🔑 API ${partResult.usedApiId} usada na parte ${partNumber}. Total de APIs usadas: ${usedApiIdsForPart.length}`);
+
+          scriptContentFull += (scriptContentFull ? "\n\n" : "") + rawPart;
+        }
+
+        // Finalizar job com o roteiro completo gerado em modo simples
+        finalizeJob(jobId, scriptContentFull, totalWordsTarget);
+        return;
+      }
+
       if (targetWords > 1500) { // ✅ NOVO: Threshold aumentado para 1500 palavras
         // Roteiro longo - gerar em chunks de 1000 palavras
         const wordsPerChunk = 1000; // ✅ NOVO: 1000 palavras por chunk
