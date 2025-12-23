@@ -10,21 +10,24 @@ import {
 import { Agent } from "@/types/agents";
 import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
-import { injectPremiseContext, buildMinimalChunkPrompt, extractLastParagraph } from "@/utils/promptInjector";
-import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
+import { injectPremiseContext } from "@/utils/promptInjector";
 import { useToast } from "@/hooks/use-toast";
-import { sanitizeScript as sanitizeScriptUtils } from "@/utils/minimalPromptBuilder";
+import {
+  buildSimpleChunkPrompt,
+  cleanGeneratedText,
+  SimpleChunkContext,
+} from "@/utils/simplePromptBuilder";
 
-// ✅ CORREÇÃO: O Kill Switch agora é estrito.
-// Só dispara com tags técnicas, permitindo CTAs (Like/Subscreva) no texto.
-function hasEndingPhrases(text: string): boolean {
-  const upper = text.toUpperCase();
-  // Apenas tags que a IA usa para sinalizar "Acabei tecnicamente"
-  const endTriggers = ["[FIM]", "[THE END]", "[FIN]"];
-
-  return endTriggers.some((trigger) => upper.includes(trigger));
-}
-
+/**
+ * Hook simplificado para geração de roteiros
+ * Baseado no sistema de referência (thiguinhasrote21) que é mais eficaz.
+ *
+ * Princípios:
+ * 1. Premissa passada em TODOS os chunks
+ * 2. Script anterior passado como contexto (~500 palavras)
+ * 3. Prompts simples e diretos
+ * 4. Confia na IA para manter consistência
+ */
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<ScriptGenerationProgress | null>(null);
@@ -43,24 +46,28 @@ export const useScriptGenerator = () => {
       setResult(null);
 
       try {
-        const detectedLanguage = request.language || agent?.language || "pt-BR";
-        const config = {
-          channelName: request.channelName || agent?.channelName || "",
-          premisePrompt: request.premisePrompt || agent?.premisePrompt || "",
-          scriptPrompt: request.scriptPrompt || agent?.scriptPrompt || "",
-          duration: request.duration || agent?.duration || 10,
-          language: detectedLanguage,
-          location: request.location || agent?.location || "Brasil",
-        };
+        // Configuração
+        const language = request.language || agent?.language || "pt-BR";
+        const location = request.location || agent?.location || "Brasil";
+        const duration = request.duration || agent?.duration || 10;
+        const premisePrompt = request.premisePrompt || agent?.premisePrompt || "";
+        const scriptPrompt = request.scriptPrompt || agent?.scriptPrompt || "";
 
-        if (!config.premisePrompt || !config.scriptPrompt) throw new Error("Prompts obrigatórios");
+        if (!premisePrompt || !scriptPrompt) {
+          throw new Error("Prompts de premissa e roteiro são obrigatórios");
+        }
 
-        const activeGeminiKeys = apiKeys.filter(
+        // Validar APIs
+        const activeApiKeys = apiKeys.filter(
           (key) => key.isActive && key.status !== "suspended" && key.status !== "invalid",
         );
-        if (provider === "gemini" && activeGeminiKeys.length === 0) throw new Error("Sem chaves Gemini ativas");
+        if (provider === "gemini" && activeApiKeys.length === 0) {
+          throw new Error("Nenhuma chave Gemini ativa disponível");
+        }
 
-        // 1. GERAR PREMISSA
+        // ========================================
+        // PASSO 1: GERAR PREMISSA
+        // ========================================
         setProgress({
           stage: "premise",
           currentChunk: 1,
@@ -69,14 +76,15 @@ export const useScriptGenerator = () => {
           targetWords: 0,
           isComplete: false,
           percentage: 10,
+          message: "Criando premissa...",
         });
 
-        const processedPremisePrompt = injectPremiseContext(config.premisePrompt, {
+        const processedPremisePrompt = injectPremiseContext(premisePrompt, {
           title: request.title,
-          channelName: config.channelName,
-          duration: config.duration,
-          language: config.language,
-          location: config.location,
+          channelName: agent?.channelName || "",
+          duration: duration,
+          language: language,
+          location: location,
         });
 
         const premiseResult =
@@ -84,142 +92,112 @@ export const useScriptGenerator = () => {
             ? await puterDeepseekService.generatePremise(processedPremisePrompt, undefined, console.log)
             : await enhancedGeminiService.generatePremise(
                 processedPremisePrompt,
-                activeGeminiKeys,
+                activeApiKeys,
                 undefined,
                 console.log,
               );
 
         const premise = premiseResult.content;
+        console.log("✅ Premissa gerada");
 
-        // 2. PARSE INTELIGENTE (ESTRUTURA)
-        const chapterMatches = premise.match(/\[(?:CAPITULO|SEÇÃO|SECTION|PART)\s*\d+\]/gi);
-        const detectedChapters = chapterMatches ? chapterMatches.length : 0;
-        const fallbackChunks = Math.max(1, Math.ceil(config.duration / 8));
+        // ========================================
+        // PASSO 2: CALCULAR ESTRUTURA
+        // ========================================
+        // Baseado no sistema de referência: 170 WPM, chunks de 10 min
+        const wpm = 170;
+        const totalWordsTarget = duration * wpm;
+        const minutesPerChunk = 10;
+        const totalChunks = Math.max(1, Math.ceil(duration / minutesPerChunk));
+        const wordsPerChunk = Math.round(totalWordsTarget / totalChunks);
 
-        // Usa o número de capítulos detetados na premissa
-        const numberOfChunks = detectedChapters > 0 ? detectedChapters : fallbackChunks;
-        const targetWordsTotal = config.duration * 140;
-        const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
+        console.log(`📊 Estrutura: ${totalChunks} partes, ~${wordsPerChunk} palavras cada`);
 
-        console.log(
-          `ESTRUTURA: ${numberOfChunks} Capítulos (baseado em ${detectedChapters > 0 ? "Premissa" : "Tempo"}).`,
-        );
-
-        setProgress({
-          stage: "script",
-          currentChunk: 1,
-          totalChunks: numberOfChunks,
-          completedWords: 0,
-          targetWords: targetWordsTotal,
-          isComplete: false,
-          percentage: 20,
-          message: `Gerando ${numberOfChunks} capítulos...`,
-        });
-
-        let scriptContent = "";
+        // ========================================
+        // PASSO 3: GERAR ROTEIRO EM PARTES
+        // ========================================
+        let fullScript = "";
         const scriptChunks: ScriptChunk[] = [];
-        let storyFinished = false;
 
-        // 3. LOOP DE GERAÇÃO
-        for (let i = 0; i < numberOfChunks; i++) {
-          if (storyFinished) break;
-
+        for (let i = 0; i < totalChunks; i++) {
           setProgress({
             stage: "script",
             currentChunk: i + 1,
-            totalChunks: numberOfChunks,
-            completedWords: scriptContent.split(/\s+/).length,
-            targetWords: targetWordsTotal,
+            totalChunks: totalChunks,
+            completedWords: fullScript.split(/\s+/).filter(w => w).length,
+            targetWords: totalWordsTarget,
             isComplete: false,
-            percentage: 20 + (i / numberOfChunks) * 80,
-            message: `Escrevendo Capítulo ${i + 1}/${numberOfChunks}...`,
+            percentage: 20 + ((i + 1) / totalChunks) * 80,
+            message: `Escrevendo parte ${i + 1} de ${totalChunks}...`,
           });
 
-          const lastParagraph = scriptContent ? extractLastParagraph(scriptContent) : "";
-
-          const chunkPrompt = buildMinimalChunkPrompt(config.scriptPrompt, {
+          // Construir contexto para o chunk
+          const chunkContext: SimpleChunkContext = {
             title: request.title,
-            language: detectedLanguage,
+            language: language,
+            location: location,
             targetWords: wordsPerChunk,
             premise: premise,
+            previousScript: fullScript,
             chunkIndex: i,
-            totalChunks: numberOfChunks,
-            // ✅ CORREÇÃO: Passar previousContent para memória narrativa
-            previousContent: i > 0 ? scriptContent : undefined,
-            lastParagraph: i > 0 && lastParagraph ? lastParagraph : undefined,
-          });
-
-          const chunkContext = {
-            premise,
-            previousContent: scriptContent,
-            chunkIndex: i,
-            totalChunks: numberOfChunks,
-            targetWords: wordsPerChunk,
-            language: detectedLanguage,
-            location: config.location,
-            isLastChunk: i === numberOfChunks - 1,
+            totalChunks: totalChunks,
+            durationMinutes: duration,
           };
 
+          // Construir prompt simples
+          const chunkPrompt = buildSimpleChunkPrompt(scriptPrompt, chunkContext);
+
+          // Gerar chunk
           const chunkResult =
             provider === "deepseek"
-              ? await puterDeepseekService.generateScriptChunk(chunkPrompt, chunkContext, console.log)
+              ? await puterDeepseekService.generateScriptChunk(
+                  chunkPrompt,
+                  { premise, previousContent: fullScript, chunkIndex: i, totalChunks, targetWords: wordsPerChunk, language, location },
+                  console.log,
+                )
               : await enhancedGeminiService.generateScriptChunk(
                   chunkPrompt,
-                  activeGeminiKeys,
-                  chunkContext,
+                  activeApiKeys,
+                  { premise, previousContent: fullScript, chunkIndex: i, totalChunks, targetWords: wordsPerChunk, language, location },
                   console.log,
                 );
 
-          let rawChunk = sanitizeScriptUtils(chunkResult.content);
-          let cleanedChunk = cleanScriptRepetitions(rawChunk);
+          // Limpar texto gerado
+          let chunkText = cleanGeneratedText(chunkResult.content);
 
-          // VERIFICAÇÃO DE TAG DE FIM
-          // Se a IA colocar [FIM], cortamos ali e paramos o loop.
-          const truncation = truncateAfterEnding(cleanedChunk);
-
-          if (truncation.found) {
-            console.log("🏁 Tag [FIM] detectada. Encerrando história.");
-            cleanedChunk = truncation.cleaned; // Mantém o texto ANTES da tag (incluindo CTAs)
-            storyFinished = true;
-          } else if (hasEndingPhrases(cleanedChunk) || i === numberOfChunks - 1) {
-            // Se detectou tag [FIM] sem truncar ou é o último chunk
-            if (hasEndingPhrases(cleanedChunk)) {
-              cleanedChunk = cleanedChunk.replace(/\[FIM\]/gi, "").replace(/\[THE END\]/gi, "");
-              storyFinished = true;
-            }
+          // Detectar tag [FIM]
+          const hasFimTag = /\[FIM\]|\[THE END\]|\[FIN\]/i.test(chunkText);
+          if (hasFimTag) {
+            chunkText = chunkText.replace(/\[FIM\]|\[THE END\]|\[FIN\]/gi, "").trim();
+            console.log("🏁 Tag [FIM] detectada. Encerrando.");
           }
 
-          scriptContent += (scriptContent ? "\n\n" : "") + cleanedChunk;
+          // Acumular
+          fullScript += (fullScript ? "\n\n" : "") + chunkText;
 
           scriptChunks.push({
             id: crypto.randomUUID(),
-            content: cleanedChunk,
-            wordCount: cleanedChunk.split(/\s+/).length,
+            content: chunkText,
+            wordCount: chunkText.split(/\s+/).filter(w => w).length,
             chunkIndex: i,
             isComplete: true,
           });
+
+          console.log(`✅ Parte ${i + 1}/${totalChunks} concluída`);
+
+          // Se encontrou tag [FIM], parar
+          if (hasFimTag) break;
         }
 
-        // 4. LIMPEZA FINAL
-        const joinedScript = scriptChunks.map((chunk) => chunk.content).join("\n\n");
-        const cleanedFullScript = cleanFinalScript(joinedScript);
-        const cleanedParagraphs = cleanedFullScript.split(/\n\n+/);
-
-        const normalizedChunks: ScriptChunk[] = cleanedParagraphs.map((content, index) => ({
-          id: crypto.randomUUID(),
-          content,
-          wordCount: content.split(/\s+/).length,
-          chunkIndex: index,
-          isComplete: true,
-        }));
-
-        const totalWords = normalizedChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
+        // ========================================
+        // PASSO 4: FINALIZAR
+        // ========================================
+        const totalWords = fullScript.split(/\s+/).filter(w => w).length;
         const estimatedDuration = totalWords / 150;
 
         const finalResult: ScriptGenerationResult = {
           premise,
-          script: normalizedChunks.map((c) => c.content),
-          chunks: normalizedChunks,
+          script: scriptChunks.map((c) => c.content),
+          chunks: scriptChunks,
           totalWords,
           estimatedDuration,
           agentUsed: agent?.name,
@@ -228,18 +206,23 @@ export const useScriptGenerator = () => {
         setResult(finalResult);
         setProgress({
           stage: "script",
-          currentChunk: numberOfChunks,
-          totalChunks: numberOfChunks,
+          currentChunk: totalChunks,
+          totalChunks: totalChunks,
           completedWords: totalWords,
           targetWords: totalWords,
           isComplete: true,
           percentage: 100,
+          message: "Concluído!",
         });
 
-        toast({ title: "Guião gerado com sucesso!", description: `${totalWords} palavras.` });
+        toast({
+          title: "Roteiro gerado com sucesso!",
+          description: `${totalWords} palavras (~${Math.round(estimatedDuration)} min)`,
+        });
 
         return finalResult;
       } catch (error) {
+        console.error("Erro na geração:", error);
         toast({
           title: "Erro na geração",
           description: error instanceof Error ? error.message : "Erro desconhecido",
