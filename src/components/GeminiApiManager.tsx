@@ -219,12 +219,15 @@ export const GeminiApiManager = () => {
   const getInternalStatusBadge = (status?: ApiStatus) => {
     if (!status) return null;
 
+    const reason = status.blockReason?.toLowerCase() || '';
+    const isBillingBlock = reason.includes('billing') || reason.includes('crédito') || reason.includes('credito') || reason.includes('sem credito') || reason.includes('sem crédito');
+
     if (!status.isAvailable) {
       if (status.blockReason) {
         return (
           <Badge variant="destructive" className="flex items-center gap-1">
             <XCircle className="w-3 h-3" />
-            Bloqueada
+            {isBillingBlock ? 'Sem créditos / billing' : 'Bloqueada'}
           </Badge>
         );
       }
@@ -265,10 +268,17 @@ export const GeminiApiManager = () => {
     const rpmDisplay = `${status.rpm ?? 0}/${rpmMax}`;
     const rpdDisplay = `${status.rpd ?? 0}/${rpdMax}`;
 
+    const reason = status.blockReason?.toLowerCase() || '';
+    const isBillingBlock = reason.includes('billing') || reason.includes('crédito') || reason.includes('credito') || reason.includes('sem credito') || reason.includes('sem crédito');
+
     if (status.blockReason) {
       return (
         <div className="mt-1">
-          <p className="text-xs text-destructive">{status.blockReason}</p>
+          <p className="text-xs text-destructive">
+            {isBillingBlock
+              ? 'Sem créditos / problema de billing na conta do Google AI Studio. Verifique seu plano ou troque a chave.'
+              : status.blockReason}
+          </p>
           <p className="text-xs text-muted-foreground">RPM: {rpmDisplay} | RPD: {rpdDisplay}</p>
         </div>
       );
@@ -444,8 +454,34 @@ export const GeminiApiManager = () => {
             </CardContent>
           </Card>
         </div>
+
+        {apiStatuses.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            APIs ativas: {activeApiKeys.length} — Disponíveis: {
+              activeApiKeys.filter((key) => {
+                const status = apiStatuses.find((s) => s.id === key.id);
+                return status && status.isAvailable && !status.isInCooldown && !status.isExhausted && !status.blockReason;
+              }).length
+            } | Cooldown: {
+              activeApiKeys.filter((key) => {
+                const status = apiStatuses.find((s) => s.id === key.id);
+                return status && status.isInCooldown;
+              }).length
+            } | Exauridas (RPD): {
+              activeApiKeys.filter((key) => {
+                const status = apiStatuses.find((s) => s.id === key.id);
+                return status && status.isExhausted && !status.blockReason;
+              }).length
+            } | Bloqueadas/billing: {
+              activeApiKeys.filter((key) => {
+                const status = apiStatuses.find((s) => s.id === key.id);
+                return status && !!status.blockReason;
+              }).length
+            }
+          </p>
+        )}
       </div>
- 
+
       {/* Lista de API Keys */}
       <div className="space-y-4">
         {apiKeys.map((apiKey) => {
