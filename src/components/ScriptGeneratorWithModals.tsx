@@ -49,12 +49,10 @@ const ScriptGeneratorWithModals: React.FC<ScriptGeneratorWithModalsProps> = ({ o
   const { agents } = useAgents();
   const { activeApiKeys } = useGeminiKeys();
   const { isMaster } = useAuth();
-  const { 
-    jobs, 
-    generateMultipleScripts, 
-    concurrentLimit, 
-    setConcurrentLimit, 
-    totalProgress, 
+  const {
+    jobs,
+    generateMultipleScripts,
+    totalProgress,
     isGenerating,
     activeJobs,
     queuedJobs,
@@ -385,50 +383,6 @@ const ScriptGeneratorWithModals: React.FC<ScriptGeneratorWithModalsProps> = ({ o
 
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <label className="text-sm font-medium cursor-help flex items-center space-x-1">
-                          <span>Limite Paralelo:</span>
-                          <AlertCircle size={14} className="text-muted-foreground" />
-                        </label>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p className="font-semibold mb-1">⚠️ Limitações do Gemini</p>
-                        <p className="text-xs mb-2">Gemini permite apenas 2 requisições por minuto (RPM) por chave de API.</p>
-                        <p className="text-xs font-semibold">Recomendações:</p>
-                        <ul className="text-xs list-disc list-inside space-y-1">
-                          <li>Use 1 roteiro por vez para máxima estabilidade</li>
-                          <li>Use 2-3 apenas se tiver 10+ APIs ativas</li>
-                          <li>Mais de 3 pode causar timeouts e erros</li>
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Select 
-                    value={concurrentLimit.toString()} 
-                    onValueChange={(value) => setConcurrentLimit(parseInt(value))}
-                  >
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 ✅</SelectItem>
-                      <SelectItem value="2">2</SelectItem>
-                      <SelectItem value="3">3</SelectItem>
-                      <SelectItem value="5">5</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {concurrentLimit > 1 && selectedProvider === 'gemini' && (
-                  <div className="flex items-center space-x-2 text-xs text-yellow-600">
-                    <AlertCircle size={14} />
-                    <span>Múltiplos roteiros podem causar limite de taxa (Gemini 2 RPM)</span>
-                  </div>
-                )}
-
                 {/* Seletor de Provider */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">IA:</span>
