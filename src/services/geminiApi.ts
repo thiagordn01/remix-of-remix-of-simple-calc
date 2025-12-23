@@ -292,8 +292,8 @@ export class GeminiApiService {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error?.message || 'Unknown error';
         
-        // Try v1beta if v1 returns 404 for newer models
-        if (response.status === 404 && url.includes('/v1/models') && (modelName.includes('2.5') || modelName.includes('2.0'))) {
+        // Try v1beta if v1 returns 404 for newer models (qualquer modelo)
+        if (response.status === 404 && url.includes('/v1/models')) {
           url = url.replace('/v1/models', '/v1beta/models');
           console.log('Retrying with v1beta endpoint:', url);
           

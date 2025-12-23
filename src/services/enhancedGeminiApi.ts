@@ -80,6 +80,11 @@ export class EnhancedGeminiService {
     return limits[model] || { rpm: 2, rpd: 50, tpm: 125000 }; // ✅ Default conservador: 2 RPM, 50 RPD
   }
 
+  // ✅ NOVO: Método público para expor os limites de modelo para outros componentes (ex: ApiStatusMonitor)
+  public getModelLimitsPublic(model: string): { rpm: number; rpd: number; tpm: number } {
+    return this.getModelLimits(model);
+  }
+
   // ✅ NOVO: Controle de cooldown e exaustão por chave
   private keyCooldownUntil = new Map<string, number>(); // RPM cooldown por chave
   private keyExhaustedUntil = new Map<string, number>(); // RPD exaustão até fim do dia UTC
