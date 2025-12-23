@@ -14,6 +14,7 @@ import { puterDeepseekService } from "@/services/puterDeepseekService";
 import { buildMinimalChunkPrompt, sanitizeScript } from "@/utils/minimalPromptBuilder";
 import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
+import { geminiChatService } from "@/services/geminiChatService";
 
 // Resposta estruturada flexível baseada em notas de coerência
 interface CoherentScriptResponse {
@@ -264,124 +265,176 @@ export const useScriptGenerator = () => {
           }
         } else {
           // ==========================
-          // MODO SIMPLES (CLONE DO SISTEMA EM CHAT ÚNICO COM PARTES INTERNAS)
-          // - Divide o roteiro em partes internas de ~10 minutos
-          // - Mantém um "chat" lógico único via contexto acumulado
-          // - Sem JSON / coherence_notes, apenas texto livre validado no final
+          // MODO SIMPLES COM CHAT PERSISTENTE
+          // Baseado no sistema de referência (thiguinhasrote21)
+          // Usa ai.chats.create() equivalente - a IA NUNCA perde contexto
           // ==========================
 
-          // Parâmetros espelhando o outro sistema
-          const wpm = 170; // palavras por minuto para corrigir baixa contagem de caracteres
-          const minutesPerPart = 10; // ~10 minutos por parte
+          // Parâmetros espelhando o sistema de referência
+          const wpm = 170;
+          const minutesPerPart = 10;
           const totalParts = Math.max(1, Math.ceil(config.duration / minutesPerPart));
           const totalWordsTarget = config.duration * wpm;
           const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
-          for (let i = 0; i < totalParts; i++) {
-            const partNumber = i + 1;
+          // Seleciona API key para esta sessão
+          const selectedApiKey = activeGeminiKeys[0];
+          if (!selectedApiKey) {
+            throw new Error("Nenhuma API key disponível");
+          }
 
-            setProgress({
-              stage: "script",
-              currentChunk: partNumber,
-              totalChunks: totalParts,
-              completedWords: scriptContentFull.split(/\s+/).length,
-              targetWords: totalWordsTarget,
-              isComplete: false,
-              percentage: 10 + (i / totalParts) * 80,
-              message:
-                i === 0
-                  ? `Escrevendo a primeira parte (${partNumber}/${totalParts}) do roteiro em modo simples (chat único)...`
-                  : `Continuando a história (parte ${partNumber}/${totalParts}) em modo simples (chat único)...`,
+          // System instruction igual ao sistema de referência
+          const scriptSystemInstruction = `
+            Você é um roteirista profissional especializado em narrativas imersivas para canais do YouTube.
+            Sua tarefa é escrever partes de um roteiro em um fluxo contínuo.
+
+            === REGRAS DE FORMATAÇÃO ===
+            - Entregue APENAS o texto da história (Narração).
+            - NÃO coloque títulos, capítulos, asteriscos (**), nem introduções do tipo 'Claro, aqui vai'.
+            - PROIBIDO: Palavras-chave soltas (ex: *TENSÃO*), ou instruções de pausa (ex: PAUSA PARA...).
+            - O TEXTO DEVE SER FLUÍDO E PRONTO PARA LEITURA EM VOZ ALTA.
+
+            === CONTEXTO TÉCNICO ===
+            - Localização do público: ${config.location}.
+            - Idioma: ${detectedLanguage}.
+            - Meta de Duração Total: ${config.duration} minutos.
+
+            === CONTROLE DE TAMANHO (MECÂNICA) ===
+            - Você está escrevendo partes de um total de ${totalParts} partes.
+            - META DE PALAVRAS POR PARTE: MÁXIMO DE ${wordsPerPart} palavras.
+            - NÃO ULTRAPASSE, MAS TENTE ATINGIR ESSA META.
+          `;
+
+          // Cria sessão de chat única para todo o roteiro
+          // IMPORTANTE: Esta sessão mantém histórico - a IA vê TUDO que já escreveu
+          const sessionId = `script-${Date.now()}-${crypto.randomUUID()}`;
+
+          // Para Gemini, usamos o chat service
+          if (provider === "gemini") {
+            geminiChatService.createChat(sessionId, selectedApiKey, {
+              systemInstruction: scriptSystemInstruction,
+              maxOutputTokens: 8192,
+              temperature: 0.9
             });
+          }
 
-            // ESTRUTURA INTERNA MENTAL (copiada do generateSingleScript)
-            let structureInstruction = "";
-            if (partNumber === 1) {
-              structureInstruction = `
-            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
-            1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
-            2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
-            3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
-            `;
-            } else if (partNumber === totalParts) {
-              structureInstruction = `
-            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-            1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
-            2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
-            3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
-            `;
-            } else {
-              structureInstruction = `
-            ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-            Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-            1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
-            2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
-            3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
-            `;
+          try {
+            for (let i = 0; i < totalParts; i++) {
+              const partNumber = i + 1;
+
+              setProgress({
+                stage: "script",
+                currentChunk: partNumber,
+                totalChunks: totalParts,
+                completedWords: scriptContentFull.split(/\s+/).length,
+                targetWords: totalWordsTarget,
+                isComplete: false,
+                percentage: 10 + (i / totalParts) * 80,
+                message: `Escrevendo parte ${partNumber}/${totalParts} (chat com memória)...`,
+              });
+
+              // Estrutura mental igual ao sistema de referência
+              let structureInstruction = "";
+              if (partNumber === 1) {
+                structureInstruction = `
+                ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+                Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
+                1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
+                2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
+                3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
+                `;
+              } else if (partNumber === totalParts) {
+                structureInstruction = `
+                ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+                Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+                1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
+                2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
+                3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
+                `;
+              } else {
+                structureInstruction = `
+                ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
+                Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
+                1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
+                2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
+                3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
+                `;
+              }
+
+              // Monta prompt da parte
+              let partPrompt = `
+                ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.
+
+                META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.
+
+                ${structureInstruction}
+
+                INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}
+
+                LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.
+                IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
+              `;
+
+              // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
+              if (partNumber === 1) {
+                partPrompt = `
+                CONTEXTO (PREMISSA APROVADA):
+                ${premise}
+
+                TÍTULO: ${request.title}
+                ` + partPrompt;
+              }
+
+              let rawPart = "";
+
+              if (provider === "gemini") {
+                // Usa chat com histórico - a IA lembra de tudo automaticamente
+                rawPart = await geminiChatService.sendMessage(sessionId, partPrompt, {
+                  temperature: 0.9,
+                  maxOutputTokens: 8192,
+                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                });
+              } else {
+                // DeepSeek: fallback para chamada isolada com contexto manual
+                const context = {
+                  premise,
+                  previousContent: i > 0 ? scriptContentFull : undefined,
+                  chunkIndex: i,
+                  totalChunks: totalParts,
+                  targetWords: wordsPerPart,
+                  language: detectedLanguage,
+                  location: config.location,
+                  isLastChunk: i === totalParts - 1,
+                  simpleMode: true,
+                } as const;
+
+                const partResult = await puterDeepseekService.generateScriptChunk(partPrompt, context, console.log);
+                rawPart = partResult.content || "";
+              }
+
+              rawPart = sanitizeScript(rawPart).trim();
+              if (!rawPart) {
+                console.warn(`Parte ${partNumber}/${totalParts} veio vazia.`);
+                continue;
+              }
+
+              scriptContentFull += (scriptContentFull ? "\n\n" : "") + rawPart;
+
+              scriptChunks.push({
+                id: crypto.randomUUID(),
+                content: rawPart,
+                wordCount: rawPart.split(/\s+/).length,
+                chunkIndex: i,
+                isComplete: true,
+              });
+
+              console.log(`✅ Parte ${partNumber}/${totalParts} concluída (${rawPart.split(/\s+/).length} palavras)`);
             }
-
-            // Prompt simples com contexto acumulado
-            let partPrompt = `${config.scriptPrompt}\n\n`;
-
-            if (i === 0) {
-              // Primeira parte: inclui premissa aprovada e título, exatamente como no outro sistema
-              partPrompt += `CONTEXTO (PREMISSA APROVADA):\n${premise}\n\n`;
-              partPrompt += `TÍTULO: ${request.title}\n\n`;
-            } else {
-              // Partes seguintes: enviamos tudo que já foi escrito para simular o mesmo chat com memória natural
-              partPrompt += `Aqui está TUDO o que você já escreveu até agora do roteiro (NÃO repita nada disso, apenas continue):\n\n`;
-              partPrompt += `${scriptContentFull}\n\n`;
-              partPrompt += `Agora continue a história exatamente do ponto onde parou.\n\n`;
+          } finally {
+            // Limpa sessão de chat
+            if (provider === "gemini") {
+              geminiChatService.clearSession(sessionId);
             }
-
-            partPrompt += `ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.\n\n`;
-            partPrompt += `META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.\n\n`;
-            partPrompt += `${structureInstruction}\n\n`;
-            partPrompt += `INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}\n\n`;
-            partPrompt += `LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.\n`;
-            if (i === totalParts - 1) {
-              partPrompt += `Esta é a parte FINAL. Feche todos os arcos, entregue um final emocionalmente forte e NÃO deixe ganchos abertos.\n`;
-            }
-
-            partPrompt += `\nRegras gerais IMPORTANTES:\n`;
-            partPrompt += `- NÃO use Markdown, títulos ou listas.\n`;
-            partPrompt += `- NÃO repita frases inteiras já usadas, especialmente no começo de parágrafos.\n`;
-            partPrompt += `- NÃO faça comentários meta (não fale sobre "roteiro", "vídeo" ou "história" como se estivesse fora dela).\n`;
-
-            const context = {
-              premise,
-              previousContent: i > 0 ? scriptContentFull : undefined,
-              chunkIndex: i,
-              totalChunks: totalParts,
-              targetWords: wordsPerPart,
-              language: detectedLanguage,
-              location: config.location,
-              isLastChunk: i === totalParts - 1,
-              simpleMode: true,
-            } as const;
-
-            const partResult =
-              provider === "deepseek"
-                ? await puterDeepseekService.generateScriptChunk(partPrompt, context, console.log)
-                : await enhancedGeminiService.generateScriptChunk(partPrompt, activeGeminiKeys, context, console.log);
-
-            const rawPart = sanitizeScript(partResult.content || "").trim();
-            if (!rawPart) {
-              console.warn(`Parte ${partNumber}/${totalParts} veio vazia no modo simples.`);
-              continue;
-            }
-
-            scriptContentFull += (scriptContentFull ? "\n\n" : "") + rawPart;
-
-            scriptChunks.push({
-              id: crypto.randomUUID(),
-              content: rawPart,
-              wordCount: rawPart.split(/\s+/).length,
-              chunkIndex: i,
-              isComplete: true,
-            });
           }
         }
 
