@@ -1,9 +1,14 @@
 // Função robusta de substituição de placeholders com mapeamento de variações
 
 export function replacePlaceholders(
-  template: string, 
+  template: string,
   data: Record<string, any>
 ): string {
+  // ✅ Compatibilidade opcional: se não houver nenhum padrão [chave], retorna o texto original
+  if (!template || !/\[[^\]]+\]/.test(template)) {
+    return template;
+  }
+
   let result = template;
   
   // Mapeamento de placeholders com suas variações
@@ -37,7 +42,7 @@ export function replacePlaceholders(
     }
   });
 
-  // Substituir todos os placeholders
+  // Substituir todos os placeholders conhecidos
   Object.keys(normalizedData).forEach(key => {
     const value = normalizedData[key];
     if (value !== undefined && value !== null) {
@@ -53,7 +58,9 @@ export function replacePlaceholders(
     console.warn('📋 Dados disponíveis:', Object.keys(normalizedData));
   }
 
-  return result;
+  // ✅ Blindagem final: remover QUALQUER placeholder que tenha sobrado
+  // Isso garante que o modelo nunca receba texto "sujo" com [tags] não resolvidas
+  return result.replace(/\[[^\]]+\]/g, '');
 }
 
 // Validação de placeholders com sugestões inteligentes
