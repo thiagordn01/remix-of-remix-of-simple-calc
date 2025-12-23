@@ -376,14 +376,24 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         
         addLog(jobId, `📝 Iniciando geração de premissa...`);
 
-        // Prompt de premissa direto (sem placeholders, igual sistema de referência)
+        // Prompt de premissa igual ao sistema de referência
+        // Inclui contexto de localização e idioma para variação
         const premisePrompt = `
+          Atue como um Roteirista de Cinema Expert localizado em: ${agent.location || 'Brasil'}.
+          Idioma de saída: ${detectedLanguage}.
+          OBJETIVO: Criar a 'Bíblia' da história (Premissa) antes do roteiro.
+          REGRAS DE FORMATAÇÃO:
+          - NÃO use Markdown de negrito (**) em excesso.
+          - NÃO inclua metadados como "Data", "Autor" ou "Versão".
+          - Apenas entregue o texto da premissa.
+          - IMPORTANTE: Seja CRIATIVO e ORIGINAL. Cada história deve ser ÚNICA.
+
           Título do Vídeo: ${job.title}
 
           Instruções para a Premissa: ${agent.premisePrompt || ''}
         `;
 
-        addLog(jobId, '📊 Premissa sem meta rígida de palavras (modelo igual ao sistema de referência)');
+        addLog(jobId, '📊 Premissa com contexto de localização e idioma para variação');
 
         // Gerar premissa usando o provider correto
         const premiseResult = job.provider === 'deepseek'
@@ -459,9 +469,8 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         const totalWordsTarget = duration * wpm;
         const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
-        // Seleciona primeira API disponível para esta sessão de chat
-        const selectedApiKey = availableApisForJob[0];
-        if (!selectedApiKey) {
+        // Verifica se há APIs disponíveis
+        if (availableApisForJob.length === 0) {
           throw new Error('Nenhuma API key disponível para chat');
         }
 
@@ -489,14 +498,15 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
         // Cria sessão de chat única para todo o roteiro
         // IMPORTANTE: A IA vê TUDO que já escreveu - mantém memória automaticamente
+        // Passa TODAS as APIs disponíveis para rotação automática em caso de erro 429
         const chatSessionId = `job-${jobId}-${Date.now()}`;
-        geminiChatService.createChat(chatSessionId, selectedApiKey, {
+        geminiChatService.createChat(chatSessionId, availableApisForJob, {
           systemInstruction: scriptSystemInstruction,
           maxOutputTokens: 8192,
           temperature: 0.9
         });
 
-        addLog(jobId, `💬 Sessão de chat criada: ${chatSessionId} (API: ${selectedApiKey.name})`);
+        addLog(jobId, `💬 Sessão de chat criada: ${chatSessionId} (${availableApisForJob.length} APIs disponíveis para rotação)`);
 
         let scriptContentFull = script;
 
