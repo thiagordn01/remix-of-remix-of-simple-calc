@@ -271,7 +271,7 @@ export const useScriptGenerator = () => {
           // ==========================
 
           // Parâmetros espelhando o sistema de referência
-          const wpm = 170;
+          const wpm = 150;
           const minutesPerPart = 10;
           const totalParts = Math.max(1, Math.ceil(config.duration / minutesPerPart));
           const totalWordsTarget = config.duration * wpm;
