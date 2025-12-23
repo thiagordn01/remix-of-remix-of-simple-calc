@@ -4,16 +4,14 @@ import { Agent } from '@/types/agents';
 import { GeminiApiKey, AIProvider } from '@/types/scripts';
 import { enhancedGeminiService } from '../services/enhancedGeminiApi';
 import { puterDeepseekService } from '../services/puterDeepseekService';
-import { replacePlaceholders } from '../utils/placeholderUtils';
 import { getLanguageFromTitleOrDefault, detectLanguageFromTitle } from '../utils/languageDetection';
 import { ScriptGenerationRequest, ScriptGenerationProgress } from '@/types/scripts';
-import { 
-  injectPremiseContext, 
-  buildChunkPrompt, 
-  buildMinimalChunkPrompt, 
-  extractSemanticAnchors, 
-  detectParagraphDuplication, 
-  sanitizeScript, 
+import {
+  buildChunkPrompt,
+  buildMinimalChunkPrompt,
+  extractSemanticAnchors,
+  detectParagraphDuplication,
+  sanitizeScript,
   extractLastParagraph,
   buildEmergencyPrompt,
   formatParagraphsForNarration
@@ -377,45 +375,27 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         });
         
         addLog(jobId, `📝 Iniciando geração de premissa...`);
-        
-        const premisePromptRaw = replacePlaceholders(agent.premisePrompt || '', {
-          title: job.title,
-          titulo: job.title,
-          channelName: agent.channelName || 'Canal',
-          canal: agent.channelName || 'Canal',
-          language: detectedLanguage,
-          idioma: detectedLanguage,
-          location: agent.location || 'Brasil',
-          localizacao: agent.location || 'Brasil',
-          duration: agent.duration || 10,
-          duracao: agent.duration || 10
-        });
-        
-        const premisePrompt = injectPremiseContext(premisePromptRaw, {
-          title: job.title,
-          channelName: agent.channelName || 'Canal',
-          duration: agent.duration || 10,
-          language: detectedLanguage,
-          location: agent.location || 'Brasil'
-        });
 
-        const premiseWordTarget = 0; // Sem meta rígida de palavras para premissa (controle 100% via prompt)
-        addLog(jobId, premiseWordTarget
-          ? `📊 Meta de palavras para premissa (opcional): ${premiseWordTarget}`
-          : '📊 Premissa sem meta rígida de palavras (modelo igual ao sistema de referência)'
-        );
+        // Prompt de premissa direto (sem placeholders, igual sistema de referência)
+        const premisePrompt = `
+          Título do Vídeo: ${job.title}
+
+          Instruções para a Premissa: ${agent.premisePrompt || ''}
+        `;
+
+        addLog(jobId, '📊 Premissa sem meta rígida de palavras (modelo igual ao sistema de referência)');
 
         // Gerar premissa usando o provider correto
         const premiseResult = job.provider === 'deepseek'
           ? await puterDeepseekService.generatePremise(
               premisePrompt,
-              premiseWordTarget || undefined,
+              undefined,
               onProgress
             )
           : await enhancedGeminiService.generatePremise(
               premisePrompt,
               availableApisForJob,
-              premiseWordTarget || undefined,
+              undefined,
               onProgress
             );
 
@@ -452,20 +432,8 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
       addLog(jobId, `🎬 Iniciando geração de roteiro...`);
 
-      const scriptPromptProcessed = replacePlaceholders(agent.scriptPrompt || '', {
-        title: job.title,
-        titulo: job.title,
-        premise: premise,
-        premissa: premise,
-        channelName: agent.channelName || 'Canal',
-        canal: agent.channelName || 'Canal',
-        language: detectedLanguage,
-        idioma: detectedLanguage,
-        location: agent.location || 'Brasil',
-        localizacao: agent.location || 'Brasil',
-        duration: agent.duration || 10,
-        duracao: agent.duration || 10
-      });
+      // Prompt de roteiro direto (sem placeholders, igual sistema de referência)
+      const scriptPromptProcessed = agent.scriptPrompt || '';
 
       // Calcular palavras alvo para o roteiro baseado na duração
       const duration = agent.duration || 10; // minutos
