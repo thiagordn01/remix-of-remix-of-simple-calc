@@ -19,6 +19,7 @@ import {
 import { validateScriptQuality, cleanFinalScript } from '@/utils/scriptCleanup';
 import { validateChunk, findNaturalCutPoint } from '@/utils/chunkValidation';
 import { geminiChatService } from '@/services/geminiChatService';
+import { puterChatService } from '@/services/puterChatService';
 
 // ✅ FLAG PARA A/B TESTING: Sistema "Prompt Invisível" vs Sistema Antigo
 // Mudar para true para ativar o novo sistema minimalista
@@ -459,9 +460,10 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
       // MODO SIMPLES COM CHAT PERSISTENTE
       // Baseado no sistema de referência (thiguinhasrote21)
       // A IA NUNCA perde contexto - usa histórico real de conversa
+      // Funciona tanto com Gemini quanto com DeepSeek via Puter
       // ========================================
-      if (job.provider === 'gemini' && duration <= 60) {
-        addLog(jobId, `🟢 Usando CHAT COM HISTÓRICO PERSISTENTE (duration=${duration} min)`);
+      if (duration <= 60) {
+        addLog(jobId, `🟢 Usando CHAT COM HISTÓRICO PERSISTENTE (duration=${duration} min, provider=${job.provider})`);
 
         const wpm = 150;
         const minutesPerPart = 10;
@@ -469,8 +471,8 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         const totalWordsTarget = duration * wpm;
         const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
-        // Verifica se há APIs disponíveis
-        if (availableApisForJob.length === 0) {
+        // Verifica se há APIs disponíveis (só para Gemini)
+        if (job.provider === 'gemini' && availableApisForJob.length === 0) {
           throw new Error('Nenhuma API key disponível para chat');
         }
 
@@ -498,15 +500,25 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
         // Cria sessão de chat única para todo o roteiro
         // IMPORTANTE: A IA vê TUDO que já escreveu - mantém memória automaticamente
-        // Passa TODAS as APIs disponíveis para rotação automática em caso de erro 429
         const chatSessionId = `job-${jobId}-${Date.now()}`;
-        geminiChatService.createChat(chatSessionId, availableApisForJob, {
-          systemInstruction: scriptSystemInstruction,
-          maxOutputTokens: 8192,
-          temperature: 0.9
-        });
 
-        addLog(jobId, `💬 Sessão de chat criada: ${chatSessionId} (${availableApisForJob.length} APIs disponíveis para rotação)`);
+        if (job.provider === 'gemini') {
+          // Gemini: Passa TODAS as APIs disponíveis para rotação automática em caso de erro 429
+          geminiChatService.createChat(chatSessionId, availableApisForJob, {
+            systemInstruction: scriptSystemInstruction,
+            maxOutputTokens: 8192,
+            temperature: 0.9
+          });
+          addLog(jobId, `💬 Sessão de chat Gemini criada: ${chatSessionId} (${availableApisForJob.length} APIs disponíveis para rotação)`);
+        } else {
+          // Puter/DeepSeek: Chat com histórico via Puter API
+          puterChatService.createChat(chatSessionId, {
+            systemInstruction: scriptSystemInstruction,
+            maxOutputTokens: 8192,
+            model: puterDeepseekService.getModel()
+          });
+          addLog(jobId, `💬 Sessão de chat Puter criada: ${chatSessionId} (modelo: ${puterDeepseekService.getModel()})`);
+        }
 
         let scriptContentFull = script;
 
@@ -575,11 +587,20 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
             }
 
             // Usa chat com histórico - a IA lembra de tudo automaticamente
-            const rawPart = await geminiChatService.sendMessage(chatSessionId, partPrompt, {
-              temperature: 0.9,
-              maxOutputTokens: 8192,
-              onProgress: (text) => addLog(jobId, `📄 Recebido: ${text.slice(0, 80)}...`)
-            });
+            let rawPart = '';
+            if (job.provider === 'gemini') {
+              rawPart = await geminiChatService.sendMessage(chatSessionId, partPrompt, {
+                temperature: 0.9,
+                maxOutputTokens: 8192,
+                onProgress: (text) => addLog(jobId, `📄 Recebido: ${text.slice(0, 80)}...`)
+              });
+            } else {
+              // Puter/DeepSeek: Chat com histórico
+              rawPart = await puterChatService.sendMessage(chatSessionId, partPrompt, {
+                maxOutputTokens: 8192,
+                onProgress: (text) => addLog(jobId, `📄 Recebido: ${text.slice(0, 80)}...`)
+              });
+            }
 
             const cleanedPart = sanitizeScript(rawPart).trim();
             if (!cleanedPart) {
@@ -592,7 +613,11 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           }
         } finally {
           // Limpa sessão de chat
-          geminiChatService.clearSession(chatSessionId);
+          if (job.provider === 'gemini') {
+            geminiChatService.clearSession(chatSessionId);
+          } else {
+            puterChatService.clearSession(chatSessionId);
+          }
           addLog(jobId, `🧹 Sessão de chat encerrada`);
         }
 

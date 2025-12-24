@@ -15,6 +15,7 @@ import { buildMinimalChunkPrompt, sanitizeScript } from "@/utils/minimalPromptBu
 import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
 import { useToast } from "@/hooks/use-toast";
 import { geminiChatService } from "@/services/geminiChatService";
+import { puterChatService } from "@/services/puterChatService";
 
 // Resposta estruturada flexível baseada em notas de coerência
 interface CoherentScriptResponse {
@@ -309,12 +310,19 @@ export const useScriptGenerator = () => {
           // IMPORTANTE: Esta sessão mantém histórico - a IA vê TUDO que já escreveu
           const sessionId = `script-${Date.now()}-${crypto.randomUUID()}`;
 
-          // Para Gemini, usamos o chat service
+          // Cria sessão de chat com histórico para ambos os providers
           if (provider === "gemini") {
             geminiChatService.createChat(sessionId, selectedApiKey, {
               systemInstruction: scriptSystemInstruction,
               maxOutputTokens: 8192,
               temperature: 0.9
+            });
+          } else {
+            // Puter/DeepSeek: também usa chat com histórico
+            puterChatService.createChat(sessionId, {
+              systemInstruction: scriptSystemInstruction,
+              maxOutputTokens: 8192,
+              model: puterDeepseekService.getModel()
             });
           }
 
@@ -395,21 +403,11 @@ export const useScriptGenerator = () => {
                   onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
                 });
               } else {
-                // DeepSeek: fallback para chamada isolada com contexto manual
-                const context = {
-                  premise,
-                  previousContent: i > 0 ? scriptContentFull : undefined,
-                  chunkIndex: i,
-                  totalChunks: totalParts,
-                  targetWords: wordsPerPart,
-                  language: detectedLanguage,
-                  location: config.location,
-                  isLastChunk: i === totalParts - 1,
-                  simpleMode: true,
-                } as const;
-
-                const partResult = await puterDeepseekService.generateScriptChunk(partPrompt, context, console.log);
-                rawPart = partResult.content || "";
+                // Puter/DeepSeek: também usa chat com histórico agora!
+                rawPart = await puterChatService.sendMessage(sessionId, partPrompt, {
+                  maxOutputTokens: 8192,
+                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                });
               }
 
               rawPart = sanitizeScript(rawPart).trim();
@@ -434,6 +432,8 @@ export const useScriptGenerator = () => {
             // Limpa sessão de chat
             if (provider === "gemini") {
               geminiChatService.clearSession(sessionId);
+            } else {
+              puterChatService.clearSession(sessionId);
             }
           }
         }
