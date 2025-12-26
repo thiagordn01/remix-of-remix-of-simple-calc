@@ -2,10 +2,12 @@ import { useEffect } from "react";
 import { Sparkles, Wand2, FileText, Shield, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import ScriptGeneratorWithModals from "@/components/ScriptGeneratorWithModals";
 import charlesLogo from "@/assets/charles-logo.png";
 const Index = () => {
   const { isMaster } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     document.title = "Gerador de Roteiros AI - Crie roteiros incríveis";
@@ -25,7 +27,25 @@ const Index = () => {
       l.href = window.location.href;
       document.head.appendChild(l);
     }
-  }, []);
+
+    // Aviso único da Versão 2
+    try {
+      const VERSION_NOTICE_KEY = "scriptgen_v2_notice_shown";
+      const alreadyShown = window.localStorage.getItem(VERSION_NOTICE_KEY);
+
+      if (!alreadyShown) {
+        toast({
+          title: "Bem-vindo à Versão 2 do Gerador!",
+          description:
+            "Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.",
+        });
+
+        window.localStorage.setItem(VERSION_NOTICE_KEY, "true");
+      }
+    } catch (err) {
+      console.warn("Não foi possível registrar aviso de versão:", err);
+    }
+  }, [toast]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-golden-50 via-amber-50/50 to-yellow-50 dark:from-background dark:via-background dark:to-muted">
