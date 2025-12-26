@@ -138,6 +138,9 @@ const Index = () => {
                 <h3 className="font-semibold text-lg">
                   Bem-vindo à Versão 2 do Gerador!
                 </h3>
+                <p className="text-sm mt-1 text-golden-100/90">
+                  Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.
+                </p>
                 <div className="mt-2 flex items-center gap-2 text-golden-100/80">
                   <span className="text-xs">
                     Em caso de bugs ou sugestões, fale comigo no Discord:
