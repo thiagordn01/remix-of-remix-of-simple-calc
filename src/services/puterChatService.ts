@@ -25,10 +25,18 @@ declare global {
             content: string | Array<{ text: string }>;
           };
         }>;
+        listModels: (provider?: string) => Promise<Array<{
+          id: string;
+          provider?: string;
+          name?: string;
+          context_window?: number;
+          max_output?: number;
+        }>>;
       };
       auth: {
         isSignedIn: () => Promise<boolean>;
         signIn: () => Promise<void>;
+        signOut: () => Promise<void>;
         getUser: () => Promise<{ username: string; email?: string } | null>;
       };
     };
