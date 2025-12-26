@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Key, TestTube, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader2, Upload, Clock } from 'lucide-react';
+import { Plus, Trash2, Key, TestTube, Eye, EyeOff, CheckCircle, XCircle, AlertCircle, Loader2, Upload, Download, Clock } from 'lucide-react';
 import { GeminiApiKey } from '@/types/scripts';
 import { useGeminiKeys } from '@/hooks/useGeminiKeys';
 import { GeminiApiService } from '@/services/geminiApi';
@@ -16,15 +16,16 @@ import { ApiBatchModal } from '@/components/ApiBatchModal';
 import { useGeminiApiStatuses, ApiStatus } from '@/hooks/useGeminiApiStatuses';
 
 export const GeminiApiManager = () => {
-  const { apiKeys, addApiKey, addMultipleApiKeys, removeApiKey, toggleApiKey, updateApiKey } = useGeminiKeys();
+  const { apiKeys, addApiKey, addMultipleApiKeys, removeApiKey, toggleApiKey, updateApiKey, exportApiKeys, importApiKeys } = useGeminiKeys();
   const { toast } = useToast();
   const { apiStatuses } = useGeminiApiStatuses(apiKeys);
-  
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [validatingKeys, setValidatingKeys] = useState<Set<string>>(new Set());
   const [showKeys, setShowKeys] = useState<Set<string>>(new Set());
-  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     key: '',
@@ -167,12 +168,12 @@ export const GeminiApiManager = () => {
           model: apiKeyData.model as GeminiApiKey['model']
         }))
       );
-      
+
       toast({
         title: "APIs adicionadas!",
         description: `${addedKeys.length} API${addedKeys.length > 1 ? 's' : ''} adicionada${addedKeys.length > 1 ? 's' : ''} com sucesso.`
       });
-      
+
       setIsBatchModalOpen(false);
     } catch (error) {
       toast({
@@ -181,6 +182,63 @@ export const GeminiApiManager = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleExportApiKeys = () => {
+    const result = exportApiKeys();
+    if (result.success) {
+      toast({
+        title: "Backup realizado!",
+        description: `${result.count} API(s) funcional(is) exportada(s) com sucesso.`
+      });
+    } else {
+      toast({
+        title: "Erro ao exportar",
+        description: result.error || "Não foi possível exportar as APIs.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Perguntar se quer substituir ou mesclar
+    const shouldReplace = apiKeys.length > 0 && window.confirm(
+      `Você já tem ${apiKeys.length} API(s) cadastrada(s). Deseja SUBSTITUIR todas?\n\n` +
+      `Clique em "OK" para SUBSTITUIR (apagar as atuais)\n` +
+      `Clique em "Cancelar" para MESCLAR (manter as atuais e adicionar as novas)`
+    );
+
+    const mode = shouldReplace ? 'replace' : 'merge';
+    const result = await importApiKeys(file, mode);
+
+    if (result.success) {
+      let description = `${result.imported} API(s) importada(s) com sucesso.`;
+      if (result.skipped && result.skipped > 0) {
+        description += ` ${result.skipped} duplicada(s) ignorada(s).`;
+      }
+      description += mode === 'replace' ? ' (substituição)' : ' (mesclagem)';
+
+      toast({
+        title: "Importação concluída!",
+        description
+      });
+    } else {
+      toast({
+        title: "Erro ao importar",
+        description: result.error || "Não foi possível importar as APIs.",
+        variant: "destructive"
+      });
+    }
+
+    // Limpar o input para permitir reimportar o mesmo arquivo
+    event.target.value = '';
   };
 
   const getStatusIcon = (status?: GeminiApiKey['status']) => {
@@ -331,13 +389,44 @@ export const GeminiApiManager = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Input oculto para importar arquivo */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {/* Botão Importar Backup */}
+          <Button
+            onClick={handleImportClick}
+            variant="outline"
+            className="flex items-center gap-2 border-golden-300 dark:border-golden-700 text-golden-700 dark:text-golden-300 hover:bg-golden-50 dark:hover:bg-golden-900/30"
+          >
+            <Upload className="w-4 h-4" />
+            Importar
+          </Button>
+
+          {/* Botão Exportar/Backup */}
+          <Button
+            onClick={handleExportApiKeys}
+            variant="outline"
+            disabled={activeApiKeys.length === 0}
+            className="flex items-center gap-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Backup
+          </Button>
+
+          {/* Botão Importação em Massa */}
           <Button
             variant="outline"
             onClick={() => setIsBatchModalOpen(true)}
-            className="flex items-center gap-2 border-golden-300 dark:border-golden-700 text-golden-700 dark:text-golden-300 hover:bg-golden-100 dark:hover:bg-golden-900/30"
+            className="flex items-center gap-2 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30"
           >
-            <Upload className="w-4 h-4" />
-            Importação em Massa
+            <Plus className="w-4 h-4" />
+            Em Massa
           </Button>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
