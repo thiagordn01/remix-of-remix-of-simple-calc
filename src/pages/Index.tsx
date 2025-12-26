@@ -141,6 +141,17 @@ const Index = () => {
                 <p className="text-sm mt-1 text-golden-100/90">
                   Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.
                 </p>
+                <p className="text-xs mt-2 text-golden-100/80">
+                  Em caso de bugs ou sugestões, fale comigo no Discord:&nbsp;
+                  <a
+                    href="https://discord.com/users/332952258486468619"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-medium text-golden-50 hover:text-yellow-200"
+                  >
+                    discord.com/users/332952258486468619
+                  </a>
+                </p>
               </div>
               <button
                 type="button"
