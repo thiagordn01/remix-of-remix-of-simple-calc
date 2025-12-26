@@ -1,13 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, Wand2, FileText, Shield, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
 import ScriptGeneratorWithModals from "@/components/ScriptGeneratorWithModals";
 import charlesLogo from "@/assets/charles-logo.png";
 const Index = () => {
   const { isMaster } = useAuth();
-  const { toast } = useToast();
+  const [showVersionBanner, setShowVersionBanner] = useState(false);
 
   useEffect(() => {
     document.title = "Gerador de Roteiros AI - Crie roteiros incríveis";
@@ -34,18 +33,13 @@ const Index = () => {
       const alreadyShown = window.localStorage.getItem(VERSION_NOTICE_KEY);
 
       if (!alreadyShown) {
-        toast({
-          title: "Bem-vindo à Versão 2 do Gerador!",
-          description:
-            "Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.",
-        });
-
+        setShowVersionBanner(true);
         window.localStorage.setItem(VERSION_NOTICE_KEY, "true");
       }
     } catch (err) {
       console.warn("Não foi possível registrar aviso de versão:", err);
     }
-  }, [toast]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-golden-50 via-amber-50/50 to-yellow-50 dark:from-background dark:via-background dark:to-muted">
@@ -97,10 +91,15 @@ const Index = () => {
                 Gerador de Roteiros
               </span>
             </h1>
-            <div className="flex items-center justify-center gap-2 text-golden-600 dark:text-golden-400">
-              <Sparkles className="w-5 h-5 animate-pulse" />
-              <p className="text-xl font-medium">Powered by AI</p>
-              <Sparkles className="w-5 h-5 animate-pulse" style={{ animationDelay: '0.5s' }} />
+            <div className="flex flex-col items-center justify-center gap-2 text-golden-600 dark:text-golden-400">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+                <p className="text-xl font-medium">Powered by AI</p>
+                <Sparkles className="w-5 h-5 animate-pulse" style={{ animationDelay: '0.5s' }} />
+              </div>
+              <div className="px-3 py-1 rounded-full border border-golden-400/80 bg-golden-900/70 text-xs font-semibold uppercase tracking-wide text-golden-100 shadow-sm">
+                Versão 2 • Atualizado
+              </div>
             </div>
           </div>
 
@@ -126,6 +125,34 @@ const Index = () => {
           </div>
         </div>
       </header>
+
+      {/* Versão 2 Banner - aparece apenas uma vez */}
+      {showVersionBanner && (
+        <section className="relative container -mt-6 mb-6 z-40 animate-fade-in">
+          <div className="max-w-3xl mx-auto rounded-2xl border border-golden-400/70 bg-gradient-to-r from-golden-900 via-amber-900 to-yellow-900 text-golden-50 px-6 py-4 shadow-golden-lg">
+            <div className="flex items-start gap-3">
+              <div className="mt-1">
+                <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">
+                  Bem-vindo à Versão 2 do Gerador!
+                </h3>
+                <p className="text-sm mt-1 text-golden-100/90">
+                  Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVersionBanner(false)}
+                className="ml-4 text-xs text-golden-200 hover:text-golden-50 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Main Content */}
       <main className="relative container pb-24">
