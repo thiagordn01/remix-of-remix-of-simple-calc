@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, Wand2, FileText, Shield, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,6 +6,7 @@ import ScriptGeneratorWithModals from "@/components/ScriptGeneratorWithModals";
 import charlesLogo from "@/assets/charles-logo.png";
 const Index = () => {
   const { isMaster } = useAuth();
+  const [showVersionBanner, setShowVersionBanner] = useState(false);
 
   useEffect(() => {
     document.title = "Gerador de Roteiros AI - Crie roteiros incríveis";
@@ -24,6 +25,19 @@ const Index = () => {
       l.rel = "canonical";
       l.href = window.location.href;
       document.head.appendChild(l);
+    }
+
+    // Aviso único da Versão 2
+    try {
+      const VERSION_NOTICE_KEY = "scriptgen_v2_notice_shown";
+      const alreadyShown = window.localStorage.getItem(VERSION_NOTICE_KEY);
+
+      if (!alreadyShown) {
+        setShowVersionBanner(true);
+        window.localStorage.setItem(VERSION_NOTICE_KEY, "true");
+      }
+    } catch (err) {
+      console.warn("Não foi possível registrar aviso de versão:", err);
     }
   }, []);
 
@@ -77,10 +91,15 @@ const Index = () => {
                 Gerador de Roteiros
               </span>
             </h1>
-            <div className="flex items-center justify-center gap-2 text-golden-600 dark:text-golden-400">
-              <Sparkles className="w-5 h-5 animate-pulse" />
-              <p className="text-xl font-medium">Powered by AI</p>
-              <Sparkles className="w-5 h-5 animate-pulse" style={{ animationDelay: '0.5s' }} />
+            <div className="flex flex-col items-center justify-center gap-2 text-golden-600 dark:text-golden-400">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+                <p className="text-xl font-medium">Powered by AI</p>
+                <Sparkles className="w-5 h-5 animate-pulse" style={{ animationDelay: '0.5s' }} />
+              </div>
+              <div className="px-3 py-1 rounded-full border border-golden-400/80 bg-golden-900/70 text-xs font-semibold uppercase tracking-wide text-golden-100 shadow-sm">
+                Versão 2 • Atualizado
+              </div>
             </div>
           </div>
 
@@ -106,6 +125,54 @@ const Index = () => {
           </div>
         </div>
       </header>
+
+      {/* Versão 2 Banner - aparece apenas uma vez */}
+      {showVersionBanner && (
+        <section className="relative container -mt-6 mb-6 z-40 animate-fade-in">
+          <div className="max-w-3xl mx-auto rounded-2xl border border-golden-400/70 bg-gradient-to-r from-golden-900 via-amber-900 to-yellow-900 text-golden-50 px-6 py-4 shadow-golden-lg">
+            <div className="flex items-start gap-3">
+              <div className="mt-1">
+                <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">
+                  Bem-vindo à Versão 2 do Gerador!
+                </h3>
+                <p className="text-sm mt-1 text-golden-100/90">
+                  Atualizamos o gerador com melhorias de qualidade, estabilidade e gestão de APIs.
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-golden-100/80">
+                  <span className="text-xs">
+                    Em caso de bugs ou sugestões, fale comigo no Discord:
+                  </span>
+                  <a
+                    href="https://discord.com/users/332952258486468619"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center rounded-full text-golden-100 hover:text-yellow-200 transition-colors group"
+                    aria-label="Falar comigo no Discord"
+                  >
+                    <svg
+                      className="w-4 h-4 opacity-80 group-hover:opacity-100 transition-opacity"
+                      viewBox="0 0 127.14 96.36"
+                      fill="currentColor"
+                    >
+                      <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVersionBanner(false)}
+                className="ml-4 text-xs text-golden-200 hover:text-golden-50 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Main Content */}
       <main className="relative container pb-24">

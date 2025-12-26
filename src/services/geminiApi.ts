@@ -233,19 +233,23 @@ export class GeminiApiService {
           status = 'unknown';
           message = 'Timeout na validação. Pode funcionar durante uso real.';
           break;
+        case 'API_REQUEST_INVALID':
+          status = 'unknown';
+          message = 'O teste rápido não é totalmente confiável para este modelo (ex.: Gemini 3 preview). A chave pode funcionar normalmente durante a geração real de roteiros.';
+          break;
         default:
           status = 'unknown';
           message = `Erro no teste: ${errorMessage}. Pode funcionar durante uso real.`;
       }
-
-      return {
-        isValid: false,
-        status,
-        message,
-        lastChecked: new Date()
-      };
-    }
-  }
+ 
+       return {
+         isValid: false,
+         status,
+         message,
+         lastChecked: new Date()
+       };
+     }
+   }
 
   // Simplified validation method - only checks if the API key works with a simple request
   static async validateApiKeyLight(apiKey: GeminiApiKey): Promise<string> {
@@ -292,8 +296,8 @@ export class GeminiApiService {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error?.message || 'Unknown error';
         
-        // Try v1beta if v1 returns 404 for newer models
-        if (response.status === 404 && url.includes('/v1/models') && (modelName.includes('2.5') || modelName.includes('2.0'))) {
+        // Try v1beta if v1 returns 404 for newer models (qualquer modelo)
+        if (response.status === 404 && url.includes('/v1/models')) {
           url = url.replace('/v1/models', '/v1beta/models');
           console.log('Retrying with v1beta endpoint:', url);
           
