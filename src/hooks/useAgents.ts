@@ -121,7 +121,7 @@ export const useAgents = () => {
 
   const duplicateAgent = useCallback((id: string, newName?: string): Agent | null => {
     let duplicatedAgentResult: Agent | null = null;
-    
+
     setAgents(prevAgents => {
       const originalAgent = prevAgents.find(agent => agent.id === id);
       if (!originalAgent) return prevAgents;
@@ -138,8 +138,118 @@ export const useAgents = () => {
       saveToStorage(updatedAgents);
       return updatedAgents;
     });
-    
+
     return duplicatedAgentResult;
+  }, [saveToStorage]);
+
+  // Exportar agentes como arquivo JSON (backup)
+  const exportAgents = useCallback(() => {
+    if (agents.length === 0) {
+      return { success: false, error: 'Nenhum agente para exportar' };
+    }
+
+    try {
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        agentsCount: agents.length,
+        agents: agents.map(agent => ({
+          ...agent,
+          createdAt: agent.createdAt.toISOString(),
+          updatedAt: agent.updatedAt.toISOString()
+        }))
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `agentes-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      return { success: true, count: agents.length };
+    } catch (error) {
+      console.error('Erro ao exportar agentes:', error);
+      return { success: false, error: 'Erro ao exportar agentes' };
+    }
+  }, [agents]);
+
+  // Importar agentes de arquivo JSON
+  const importAgents = useCallback((file: File, mode: 'replace' | 'merge' = 'merge'): Promise<{ success: boolean; imported?: number; error?: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        try {
+          const content = event.target?.result as string;
+          const data = JSON.parse(content);
+
+          // Validar estrutura do arquivo
+          if (!data.agents || !Array.isArray(data.agents)) {
+            resolve({ success: false, error: 'Arquivo inválido: formato não reconhecido' });
+            return;
+          }
+
+          // Converter e validar agentes
+          const importedAgents: Agent[] = data.agents.map((agent: any) => ({
+            id: mode === 'replace' ? agent.id : crypto.randomUUID(), // Gera novo ID no merge para evitar conflitos
+            name: agent.name || 'Agente Importado',
+            description: agent.description || '',
+            channelName: agent.channelName || '',
+            duration: agent.duration || 10,
+            language: agent.language || 'pt-BR',
+            location: agent.location || 'Brasil',
+            premisePrompt: agent.premisePrompt || '',
+            scriptPrompt: agent.scriptPrompt || '',
+            createdAt: new Date(agent.createdAt || new Date()),
+            updatedAt: new Date()
+          }));
+
+          if (importedAgents.length === 0) {
+            resolve({ success: false, error: 'Nenhum agente válido encontrado no arquivo' });
+            return;
+          }
+
+          setAgents(prevAgents => {
+            let newAgents: Agent[];
+
+            if (mode === 'replace') {
+              // Substituir todos os agentes
+              newAgents = importedAgents;
+            } else {
+              // Merge: adicionar novos agentes (evitar duplicados por nome)
+              const existingNames = new Set(prevAgents.map(a => a.name.toLowerCase()));
+              const uniqueImported = importedAgents.map(agent => {
+                if (existingNames.has(agent.name.toLowerCase())) {
+                  return { ...agent, name: `${agent.name} (Importado)` };
+                }
+                return agent;
+              });
+              newAgents = [...prevAgents, ...uniqueImported];
+            }
+
+            saveToStorage(newAgents);
+            return newAgents;
+          });
+
+          resolve({ success: true, imported: importedAgents.length });
+        } catch (error) {
+          console.error('Erro ao processar arquivo:', error);
+          resolve({ success: false, error: 'Erro ao processar arquivo JSON' });
+        }
+      };
+
+      reader.onerror = () => {
+        resolve({ success: false, error: 'Erro ao ler arquivo' });
+      };
+
+      reader.readAsText(file);
+    });
   }, [saveToStorage]);
 
   return {
@@ -149,6 +259,8 @@ export const useAgents = () => {
     updateAgent,
     deleteAgent,
     getAgent,
-    duplicateAgent
+    duplicateAgent,
+    exportAgents,
+    importAgents
   };
 };

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, Copy, Bot } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Bot, Download, Upload } from 'lucide-react';
 import { Agent, CreateAgentRequest } from '@/types/agents';
 import { useAgents } from '@/hooks/useAgents';
 import { useToast } from '@/hooks/use-toast';
@@ -14,12 +14,13 @@ interface AgentManagerProps {
 }
 
 export const AgentManager = ({ onSelectAgent, selectedAgentId }: AgentManagerProps) => {
-  const { agents, createAgent, updateAgent, deleteAgent, duplicateAgent } = useAgents();
+  const { agents, createAgent, updateAgent, deleteAgent, duplicateAgent, exportAgents, importAgents } = useAgents();
   const { toast } = useToast();
-  
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreateAgent = (agentData: CreateAgentRequest) => {
     try {
@@ -110,6 +111,57 @@ export const AgentManager = ({ onSelectAgent, selectedAgentId }: AgentManagerPro
     setIsCreateDialogOpen(true);
   };
 
+  const handleExportAgents = () => {
+    const result = exportAgents();
+    if (result.success) {
+      toast({
+        title: "Backup realizado!",
+        description: `${result.count} agente(s) exportado(s) com sucesso.`
+      });
+    } else {
+      toast({
+        title: "Erro ao exportar",
+        description: result.error || "Não foi possível exportar os agentes.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Perguntar se quer substituir ou mesclar
+    const shouldReplace = agents.length > 0 && window.confirm(
+      `Você já tem ${agents.length} agente(s). Deseja SUBSTITUIR todos os agentes existentes?\n\n` +
+      `Clique em "OK" para SUBSTITUIR (apagar os atuais)\n` +
+      `Clique em "Cancelar" para MESCLAR (manter os atuais e adicionar os novos)`
+    );
+
+    const mode = shouldReplace ? 'replace' : 'merge';
+    const result = await importAgents(file, mode);
+
+    if (result.success) {
+      toast({
+        title: "Importação concluída!",
+        description: `${result.imported} agente(s) importado(s) com sucesso.${mode === 'replace' ? ' (substituição)' : ' (mesclagem)'}`
+      });
+    } else {
+      toast({
+        title: "Erro ao importar",
+        description: result.error || "Não foi possível importar os agentes.",
+        variant: "destructive"
+      });
+    }
+
+    // Limpar o input para permitir reimportar o mesmo arquivo
+    event.target.value = '';
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -120,10 +172,43 @@ export const AgentManager = ({ onSelectAgent, selectedAgentId }: AgentManagerPro
           </p>
         </div>
 
-        <Button onClick={openCreateDialog} className="flex items-center gap-2 bg-gradient-to-r from-golden-500 to-amber-500 hover:from-golden-600 hover:to-amber-600 text-white shadow-golden">
-          <Plus className="w-4 h-4" />
-          Novo Agente
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Input oculto para importar arquivo */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {/* Botão Importar */}
+          <Button
+            onClick={handleImportClick}
+            variant="outline"
+            className="flex items-center gap-2 border-golden-300 dark:border-golden-700 text-golden-700 dark:text-golden-300 hover:bg-golden-50 dark:hover:bg-golden-900/30"
+          >
+            <Upload className="w-4 h-4" />
+            Importar
+          </Button>
+
+          {/* Botão Exportar/Backup */}
+          <Button
+            onClick={handleExportAgents}
+            variant="outline"
+            disabled={agents.length === 0}
+            className="flex items-center gap-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Backup
+          </Button>
+
+          {/* Botão Novo Agente */}
+          <Button onClick={openCreateDialog} className="flex items-center gap-2 bg-gradient-to-r from-golden-500 to-amber-500 hover:from-golden-600 hover:to-amber-600 text-white shadow-golden">
+            <Plus className="w-4 h-4" />
+            Novo Agente
+          </Button>
+        </div>
       </div>
 
       {/* Lista de Agentes */}
