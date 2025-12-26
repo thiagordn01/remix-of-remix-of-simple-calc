@@ -126,25 +126,160 @@ export const useGeminiKeys = () => {
   }, [saveToStorage]);
 
   const getActiveApiKeys = useCallback(() => {
-    return apiKeys.filter(key => 
-      key.isActive && 
+    return apiKeys.filter(key =>
+      key.isActive &&
       key.status !== 'suspended' &&
       key.status !== 'invalid'
     );
   }, [apiKeys]);
+
+  // Exportar APIs funcionais como arquivo JSON (backup)
+  // Exporta apenas APIs que estão ativas e não são inválidas/suspensas
+  const exportApiKeys = useCallback(() => {
+    const workingKeys = apiKeys.filter(key =>
+      key.isActive &&
+      key.status !== 'suspended' &&
+      key.status !== 'invalid'
+    );
+
+    if (workingKeys.length === 0) {
+      return { success: false, error: 'Nenhuma API funcional para exportar' };
+    }
+
+    try {
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        apiKeysCount: workingKeys.length,
+        apiKeys: workingKeys.map(key => ({
+          name: key.name,
+          key: key.key,
+          model: key.model,
+          // Não exporta dados de status/uso pois podem estar desatualizados
+        }))
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `apis-gemini-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      return { success: true, count: workingKeys.length };
+    } catch (error) {
+      console.error('Erro ao exportar APIs:', error);
+      return { success: false, error: 'Erro ao exportar APIs' };
+    }
+  }, [apiKeys]);
+
+  // Importar APIs de arquivo JSON
+  const importApiKeys = useCallback((file: File, mode: 'replace' | 'merge' = 'merge'): Promise<{ success: boolean; imported?: number; skipped?: number; error?: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        try {
+          const content = event.target?.result as string;
+          const data = JSON.parse(content);
+
+          // Validar estrutura do arquivo
+          if (!data.apiKeys || !Array.isArray(data.apiKeys)) {
+            resolve({ success: false, error: 'Arquivo inválido: formato não reconhecido' });
+            return;
+          }
+
+          // Filtrar APIs válidas (que tem key)
+          const validKeys = data.apiKeys.filter((api: any) => api.key && api.key.trim());
+
+          if (validKeys.length === 0) {
+            resolve({ success: false, error: 'Nenhuma API válida encontrada no arquivo' });
+            return;
+          }
+
+          // Verificar duplicados por chave
+          const existingKeyValues = new Set(apiKeys.map(k => k.key));
+          let skipped = 0;
+
+          setApiKeys(prevKeys => {
+            let newKeys: GeminiApiKey[];
+
+            if (mode === 'replace') {
+              // Substituir todas as APIs
+              newKeys = validKeys.map((api: any) => ({
+                id: crypto.randomUUID(),
+                name: api.name || 'API Importada',
+                key: api.key,
+                model: api.model || 'gemini-3-flash-preview',
+                requestCount: 0,
+                isActive: true,
+                status: 'unknown' as const,
+                statusMessage: 'Importada - clique em Testar para validar'
+              }));
+            } else {
+              // Merge: adicionar apenas APIs que não existem
+              const newImported: GeminiApiKey[] = [];
+
+              for (const api of validKeys) {
+                if (existingKeyValues.has(api.key)) {
+                  skipped++;
+                  continue;
+                }
+
+                newImported.push({
+                  id: crypto.randomUUID(),
+                  name: api.name || 'API Importada',
+                  key: api.key,
+                  model: api.model || 'gemini-3-flash-preview',
+                  requestCount: 0,
+                  isActive: true,
+                  status: 'unknown' as const,
+                  statusMessage: 'Importada - clique em Testar para validar'
+                });
+              }
+
+              newKeys = [...prevKeys, ...newImported];
+            }
+
+            saveToStorage(newKeys);
+            return newKeys;
+          });
+
+          const imported = mode === 'replace' ? validKeys.length : validKeys.length - skipped;
+          resolve({ success: true, imported, skipped });
+        } catch (error) {
+          console.error('Erro ao processar arquivo:', error);
+          resolve({ success: false, error: 'Erro ao processar arquivo JSON' });
+        }
+      };
+
+      reader.onerror = () => {
+        resolve({ success: false, error: 'Erro ao ler arquivo' });
+      };
+
+      reader.readAsText(file);
+    });
+  }, [apiKeys, saveToStorage]);
 
   // Propriedade computada para compatibilidade
   const activeApiKeys = getActiveApiKeys();
 
   return {
     apiKeys,
-    activeApiKeys, // Adicionado para compatibilidade
+    activeApiKeys,
     addApiKey,
     addMultipleApiKeys,
     removeApiKey,
     deleteApiKey: removeApiKey,
     toggleApiKey,
     updateApiKey,
-    getActiveApiKeys
+    getActiveApiKeys,
+    exportApiKeys,
+    importApiKeys
   };
 };
