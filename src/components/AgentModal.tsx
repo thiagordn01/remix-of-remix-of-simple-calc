@@ -165,7 +165,6 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 
   const getPreviewText = (prompt: string, isPremise: boolean = false) => {
     const context = {
-      title: formData.name || 'Exemplo de Título',
       channelName: formData.channelName,
       duration: formData.duration || 10,
       language: LANGUAGES.find(l => l.code === formData.language)?.name || formData.language,
@@ -173,20 +172,20 @@ export const AgentModal: React.FC<AgentModalProps> = ({
     };
 
     let preview = `📋 CONTEXTO AUTOMÁTICO:\n`;
-    preview += `• Título: ${context.title}\n`;
+    preview += `• Título: [será informado na geração]\n`;
     if (context.channelName) {
       preview += `• Canal: ${context.channelName}\n`;
     }
     preview += `• Duração: ${context.duration} minutos\n`;
     preview += `• Idioma: ${context.language}\n`;
     preview += `• Público: ${context.location}\n`;
-    
+
     if (!isPremise) {
       preview += `• Premissa: [gerada automaticamente]\n`;
     }
-    
+
     preview += `\n✨ SEU PROMPT:\n${prompt || 'Digite suas instruções aqui...'}`;
-    
+
     return preview;
   };
 
