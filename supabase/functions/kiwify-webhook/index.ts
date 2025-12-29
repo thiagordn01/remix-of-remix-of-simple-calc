@@ -265,7 +265,20 @@ async function sendToPartnerAPI(
   durationDays: number = 30
 ): Promise<boolean> {
   try {
-    console.log(`📤 Enviando dados para API do parceiro: ${email} (type: ${type}, duration: ${durationDays} dias)`);
+    // Validar campos obrigatórios
+    if (!email || !name) {
+      console.error(`❌ Campos obrigatórios faltando: email=${email}, name=${name}`);
+      return false;
+    }
+
+    const requestBody = {
+      email: email,
+      name: name,
+      type: type,
+      durationDays: durationDays,
+    };
+
+    console.log(`📤 Enviando dados para API do parceiro:`, JSON.stringify(requestBody));
 
     const response = await fetch(TALKIFY_API_URL, {
       method: "POST",
@@ -273,12 +286,7 @@ async function sendToPartnerAPI(
         "Authorization": `Bearer ${TALKIFY_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        email: email,
-        name: name,
-        type: type,
-        durationDays: durationDays,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
