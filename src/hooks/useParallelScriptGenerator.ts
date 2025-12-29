@@ -556,11 +556,23 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
             // Estrutura mental traduzida para o idioma alvo
             const structureInstruction = getStructureInstruction(detectedLanguage, partNumber, totalParts);
 
+            // Verificar se é a última parte
+            const isLastPart = partNumber === totalParts;
+
             // Monta prompt da parte com instrução de idioma no topo
             let partPrompt = `
               🚨 LANGUAGE: ${detectedLanguage} - ${writeInLanguageInstruction} 🚨
 
               WRITE PART ${partNumber} OF ${totalParts}.
+              ${isLastPart ? `
+              ⚠️⚠️⚠️ THIS IS THE FINAL PART - YOU MUST END THE STORY! ⚠️⚠️⚠️
+              - Bring the narrative to a COMPLETE conclusion
+              - Resolve all plot threads
+              - Write a satisfying ending
+              - DO NOT leave anything open or unfinished
+              - The story MUST have a clear ending
+              ⚠️⚠️⚠️ END OF FINAL PART INSTRUCTIONS ⚠️⚠️⚠️
+              ` : ''}
 
               TARGET LENGTH: ~${wordsPerPart} words. Try to fill the maximum.
 
@@ -570,6 +582,9 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
               REMEMBER: Describe the invisible. Use metaphors. Fill the time.
               IMPORTANT: DO NOT WRITE THE TOPIC NAMES ABOVE. ONLY THE NARRATION.
+              ${isLastPart ? `
+              🏁 CRITICAL REMINDER: This is the LAST part. You MUST conclude the entire story with a proper ending. Do not stop in the middle of events.
+              ` : ''}
             `;
 
             // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
