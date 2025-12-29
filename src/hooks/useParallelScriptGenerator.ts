@@ -4,7 +4,16 @@ import { Agent } from '@/types/agents';
 import { GeminiApiKey, AIProvider } from '@/types/scripts';
 import { enhancedGeminiService } from '../services/enhancedGeminiApi';
 import { puterDeepseekService } from '../services/puterDeepseekService';
-import { getLanguageFromTitleOrDefault, detectLanguageFromTitle } from '../utils/languageDetection';
+import {
+  getLanguageFromTitleOrDefault,
+  detectLanguageFromTitle,
+  getLanguageWPM,
+  getStructureInstruction,
+  getFormatRules,
+  getWriteInLanguageInstruction,
+  countWordsForLanguage,
+  isCharacterBasedLanguage
+} from '../utils/languageDetection';
 import { ScriptGenerationRequest, ScriptGenerationProgress } from '@/types/scripts';
 import {
   buildChunkPrompt,
@@ -143,18 +152,22 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
   // ✅ NOVO: Função helper centralizada para finalizar job (curto ou chunkado)
   const finalizeJob = useCallback(
-    (jobId: string, rawScript: string, targetWords: number) => {
+    (jobId: string, rawScript: string, targetWords: number, language?: string) => {
       const job = jobsRef.current.find(j => j.id === jobId);
       if (!job) return;
 
       // Aplicar limpeza COMPLETA apenas sobre o roteiro final concatenado
       const cleanedFullScript = cleanFinalScript(rawScript);
-      const totalWordCount = cleanedFullScript.split(/\s+/).filter(Boolean).length;
+
+      // Usar contagem de palavras apropriada para o idioma
+      const langCode = language || 'pt-BR';
+      const totalWordCount = countWordsForLanguage(cleanedFullScript, langCode);
+      const wpm = getLanguageWPM(langCode);
 
       addLog(jobId, `✅ Roteiro completo gerado: ${totalWordCount} palavras`);
       addLog(
         jobId,
-        `⏱️ Duração estimada: ~${Math.ceil(totalWordCount / 150)} minutos`
+        `⏱️ Duração estimada: ~${Math.ceil(totalWordCount / wpm)} minutos (WPM: ${wpm})`
       );
 
       // Capturar estatísticas das APIs para diagnóstico
@@ -446,10 +459,12 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
       // Prompt de roteiro direto (sem placeholders, igual sistema de referência)
       const scriptPromptProcessed = agent.scriptPrompt || '';
 
-      // Calcular palavras alvo para o roteiro baseado na duração
+      // Calcular palavras alvo para o roteiro baseado na duração e IDIOMA
       const duration = agent.duration || 10; // minutos
-      const wordsPerMinute = 150;
+      const wordsPerMinute = getLanguageWPM(detectedLanguage); // WPM baseado no idioma
       const targetWords = duration * wordsPerMinute;
+
+      addLog(jobId, `📊 WPM para ${detectedLanguage}: ${wordsPerMinute} (ajustado por idioma)`);
       
       addLog(jobId, `📊 Meta de palavras para roteiro: ${targetWords} (${duration} min de duração)`);
 
@@ -465,7 +480,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
       if (duration <= 60) {
         addLog(jobId, `🟢 Usando CHAT COM HISTÓRICO PERSISTENTE (duration=${duration} min, provider=${job.provider})`);
 
-        const wpm = 150;
+        const wpm = getLanguageWPM(detectedLanguage);
         const minutesPerPart = 10;
         const totalParts = Math.max(1, Math.ceil(duration / minutesPerPart));
         const totalWordsTarget = duration * wpm;
@@ -476,26 +491,30 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           throw new Error('Nenhuma API key disponível para chat');
         }
 
-        // System instruction igual ao sistema de referência
+        // System instruction com regras traduzidas para o idioma alvo
+        const formatRules = getFormatRules(detectedLanguage);
+        const writeInLanguageInstruction = getWriteInLanguageInstruction(detectedLanguage);
+
         const scriptSystemInstruction = `
-          Você é um roteirista profissional especializado em narrativas imersivas para canais do YouTube.
-          Sua tarefa é escrever partes de um roteiro em um fluxo contínuo.
+          You are a professional scriptwriter specialized in immersive narratives for YouTube channels.
+          Your task is to write parts of a script in a continuous flow.
 
-          === REGRAS DE FORMATAÇÃO ===
-          - Entregue APENAS o texto da história (Narração).
-          - NÃO coloque títulos, capítulos, asteriscos (**), nem introduções do tipo 'Claro, aqui vai'.
-          - PROIBIDO: Palavras-chave soltas (ex: *TENSÃO*), ou instruções de pausa (ex: PAUSA PARA...).
-          - O TEXTO DEVE SER FLUÍDO E PRONTO PARA LEITURA EM VOZ ALTA.
+          🚨🚨🚨 CRITICAL LANGUAGE REQUIREMENT 🚨🚨🚨
+          ${writeInLanguageInstruction}
+          DO NOT MIX LANGUAGES. DO NOT USE ANY OTHER LANGUAGE.
+          🚨🚨🚨 END OF LANGUAGE REQUIREMENT 🚨🚨🚨
 
-          === CONTEXTO TÉCNICO ===
-          - Localização do público: ${agent.location || 'Brasil'}.
-          - Idioma: ${detectedLanguage}.
-          - Meta de Duração Total: ${duration} minutos.
+          ${formatRules}
 
-          === CONTROLE DE TAMANHO ===
-          - Você está escrevendo partes de um total de ${totalParts} partes.
-          - META DE PALAVRAS POR PARTE: MÁXIMO DE ${wordsPerPart} palavras.
-          - NÃO ULTRAPASSE, MAS TENTE ATINGIR ESSA META.
+          === TECHNICAL CONTEXT ===
+          - Target audience location: ${agent.location || 'Brasil'}.
+          - Output language: ${detectedLanguage}.
+          - Target total duration: ${duration} minutes.
+
+          === SIZE CONTROL ===
+          - You are writing parts of a total of ${totalParts} parts.
+          - TARGET WORDS PER PART: MAXIMUM OF ${wordsPerPart} words.
+          - DO NOT EXCEED, BUT TRY TO REACH THIS TARGET.
         `;
 
         // Cria sessão de chat única para todo o roteiro
@@ -534,55 +553,35 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
 
             addLog(jobId, `📝 Escrevendo parte ${partNumber}/${totalParts} (chat com memória)...`);
 
-            // Estrutura mental igual ao sistema de referência
-            let structureInstruction = '';
-            if (partNumber === 1) {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
-              1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
-              2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
-              3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
-              `;
-            } else if (partNumber === totalParts) {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-              1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
-              2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
-              3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
-              `;
-            } else {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-              1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
-              2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
-              3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
-              `;
-            }
+            // Estrutura mental traduzida para o idioma alvo
+            const structureInstruction = getStructureInstruction(detectedLanguage, partNumber, totalParts);
 
-            // Monta prompt da parte
+            // Monta prompt da parte com instrução de idioma no topo
             let partPrompt = `
-              ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.
+              🚨 LANGUAGE: ${detectedLanguage} - ${writeInLanguageInstruction} 🚨
 
-              META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.
+              WRITE PART ${partNumber} OF ${totalParts}.
+
+              TARGET LENGTH: ~${wordsPerPart} words. Try to fill the maximum.
 
               ${structureInstruction}
 
-              INSTRUÇÕES DO USUÁRIO: ${scriptPromptProcessed}
+              USER INSTRUCTIONS: ${scriptPromptProcessed}
 
-              LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.
-              IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
+              REMEMBER: Describe the invisible. Use metaphors. Fill the time.
+              IMPORTANT: DO NOT WRITE THE TOPIC NAMES ABOVE. ONLY THE NARRATION.
             `;
 
             // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
             if (partNumber === 1) {
               partPrompt = `
-              CONTEXTO (PREMISSA APROVADA):
+              🚨 CRITICAL - OUTPUT LANGUAGE: ${detectedLanguage} 🚨
+              ${writeInLanguageInstruction}
+
+              CONTEXT (APPROVED PREMISE):
               ${premise}
 
-              TÍTULO: ${job.title}
+              TITLE: ${job.title}
               ` + partPrompt;
             }
 
@@ -609,7 +608,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
             }
 
             scriptContentFull += (scriptContentFull ? "\n\n" : "") + cleanedPart;
-            addLog(jobId, `✅ Parte ${partNumber}/${totalParts} concluída (${cleanedPart.split(/\s+/).length} palavras)`);
+            addLog(jobId, `✅ Parte ${partNumber}/${totalParts} concluída (${countWordsForLanguage(cleanedPart, detectedLanguage)} palavras)`);
           }
         } finally {
           // Limpa sessão de chat
@@ -622,7 +621,7 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
         }
 
         // Finalizar job com o roteiro completo
-        finalizeJob(jobId, scriptContentFull, totalWordsTarget);
+        finalizeJob(jobId, scriptContentFull, totalWordsTarget, detectedLanguage);
         return;
       }
 
@@ -1071,7 +1070,7 @@ REGRAS:
         }
 
         addLog(jobId, '✅ Todos os chunks do roteiro foram gerados. Aplicando limpeza final única...');
-        finalizeJob(jobId, script, targetWords);
+        finalizeJob(jobId, script, targetWords, detectedLanguage);
       } else {
         // Roteiro curto/médio (<1500 palavras) - gerar de uma vez
         addLog(jobId, `📝 Gerando roteiro completo em 1 requisição (~${targetWords} palavras)`);
@@ -1183,7 +1182,7 @@ REGRAS:
         }
 
         // ✅ Aplicar limpeza COMPLETA e finalizar job usando helper compartilhado
-        finalizeJob(jobId, script, targetWords);
+        finalizeJob(jobId, script, targetWords, detectedLanguage);
 
     }
 
