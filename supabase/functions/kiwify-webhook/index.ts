@@ -258,9 +258,14 @@ async function sendCredentialsEmail(
  * Envia dados do usuário para a API do parceiro (Talkify/Charles Network)
  * Isso dá acesso ao sistema do parceiro automaticamente
  */
-async function sendToPartnerAPI(email: string, name: string): Promise<boolean> {
+async function sendToPartnerAPI(
+  email: string,
+  name: string,
+  type: "subscription" | "one_time" = "subscription",
+  durationDays: number = 30
+): Promise<boolean> {
   try {
-    console.log(`📤 Enviando dados para API do parceiro: ${email}`);
+    console.log(`📤 Enviando dados para API do parceiro: ${email} (type: ${type}, duration: ${durationDays} dias)`);
 
     const response = await fetch(TALKIFY_API_URL, {
       method: "POST",
@@ -271,6 +276,8 @@ async function sendToPartnerAPI(email: string, name: string): Promise<boolean> {
       body: JSON.stringify({
         email: email,
         name: name,
+        type: type,
+        durationDays: durationDays,
       }),
     });
 
@@ -597,7 +604,11 @@ async function handlePaidOrder(payload: KiwifyWebhook, admin: any): Promise<Resp
 
     // 14. Enviar dados para API do parceiro (Talkify/Charles Network)
     // Isso dá acesso automático ao sistema do parceiro
-    await sendToPartnerAPI(customerEmail, customerName);
+    const isSubscription = !!(payload.Subscription?.subscription_id || payload.Subscription?.id);
+    const subscriptionType: "subscription" | "one_time" = isSubscription ? "subscription" : "one_time";
+    const durationDays = getDaysForFrequency(payload.Subscription?.plan?.frequency);
+
+    await sendToPartnerAPI(customerEmail, customerName, subscriptionType, durationDays);
 
     // 15. Retornar sucesso
     console.log(`✅ Webhook ${isReprocessing ? 'reprocessado' : 'processado'} com sucesso para pedido ${payload.order_id}`);
