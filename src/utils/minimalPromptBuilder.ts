@@ -1,5 +1,6 @@
 // src/utils/minimalPromptBuilder.ts
 import { WorldState } from "@/types/scripts";
+import { getWriteInLanguageInstruction } from "./languageDetection";
 
 
 // ============================================================================
@@ -26,51 +27,63 @@ export interface MinimalChunkContext {
 /**
  * Constrói o prompt "Autor-Auditor" que exige JSON e validação lógica.
  * Esta é a função principal usada pelo useScriptGenerator novo.
+ * ✅ ATUALIZADO: Adiciona instrução de idioma no TOPO do prompt
  */
 export function buildMinimalChunkPrompt(basePrompt: string, options: MinimalChunkContext): string {
   const { title, language, targetWords, premise, chunkIndex, totalChunks, previousContent } = options;
 
-  // Instrução de formato JSON flexível com notas de coerência
+  // Obter instrução de idioma na língua nativa
+  const writeInLanguageInstruction = getWriteInLanguageInstruction(language);
+
+  // Instrução de formato JSON (bilíngue para garantir compreensão)
   const jsonInstruction = `
-🛑 REGRA DE FORMATO OBRIGATÓRIA (CRÍTICO):
-Você NÃO deve retornar texto solto. Você deve retornar um OBJETO JSON VÁLIDO com a seguinte estrutura exata:
+🛑 MANDATORY FORMAT RULE (CRITICAL):
+You must NOT return loose text. You must return a VALID JSON OBJECT with the following exact structure:
 
 {
-  "script_content": "Texto do roteiro, contínuo, como se fosse um capítulo de um livro ou roteiro de vídeo.",
+  "script_content": "Script text, continuous, as if it were a chapter of a book or video script.",
   "coherence_notes": [
-    "Fato 1 importante que você estabeleceu neste trecho (ex: A menina tem 8 anos, ou Estamos no inverno).",
-    "Fato 2 (ex: O Bitcoin caiu hoje, ou O conceito X já foi explicado)."
+    "Important fact 1 you established in this section (e.g.: The girl is 8 years old, or It's winter).",
+    "Fact 2 (e.g.: Bitcoin dropped today, or Concept X was already explained)."
   ]
 }
 
-Regras para "coherence_notes":
-- É uma LISTA de frases curtas em linguagem natural.
-- Cada item deve descrever UM fato importante ou estado estabelecido neste capítulo.
-- Use de 2 a 6 itens por capítulo.
-- Esses fatos serão usados para manter a coerência nos próximos capítulos.
+Rules for "coherence_notes":
+- It's a LIST of short sentences in natural language.
+- Each item should describe ONE important fact or state established in this chapter.
+- Use 2 to 6 items per chapter.
+- These facts will be used to maintain coherence in the next chapters.
 `;
 
   return `
-ATUE COMO UM ROTEIRISTA E CURADOR DE COERÊNCIA NARRATIVA.
+🚨🚨🚨 CRITICAL LANGUAGE REQUIREMENT - READ FIRST 🚨🚨🚨
+OUTPUT LANGUAGE: ${language}
+${writeInLanguageInstruction}
+DO NOT MIX LANGUAGES. DO NOT USE ANY OTHER LANGUAGE.
+ALL TEXT IN "script_content" MUST BE 100% IN ${language}.
+🚨🚨🚨 END OF LANGUAGE REQUIREMENT 🚨🚨🚨
 
-CONTEXTO DA OBRA:
-- Título: "${title}"
-- Premissa Base: ${premise}
-- Idioma: ${language}
+ACT AS A SCRIPTWRITER AND NARRATIVE COHERENCE CURATOR.
 
-TAREFA ATUAL:
-Escreva o CAPÍTULO ${chunkIndex + 1} de ${totalChunks}.
-Meta de extensão: ~${targetWords} palavras.
+WORK CONTEXT:
+- Title: "${title}"
+- Base Premise: ${premise}
+- Language: ${language}
 
-${chunkIndex > 0 ? `RESUMO DO ANTERIOR: ...${extractLastParagraph(previousContent || "")}` : "INÍCIO DA HISTÓRIA."}
+CURRENT TASK:
+Write CHAPTER ${chunkIndex + 1} of ${totalChunks}.
+Target length: ~${targetWords} words.
+
+${chunkIndex > 0 ? `PREVIOUS SUMMARY: ...${extractLastParagraph(previousContent || "")}` : "BEGINNING OF THE STORY."}
 
 ${jsonInstruction}
 
-⚠️ IMPORTANTE:
-1. Escreva o capítulo de forma fluida, imersiva e contínua em "script_content".
-2. NÃO use Markdown no JSON. Apenas JSON puro.
-3. Em "coherence_notes", liste fatos importantes que precisam ser mantidos nos próximos capítulos (personagens, relações, eventos, segredos, revelações, contexto temporal, etc.).
-4. Não coloque o texto do roteiro dentro de "coherence_notes". Use apenas frases-resumo dos fatos.
+⚠️ IMPORTANT:
+1. Write the chapter in a fluid, immersive and continuous way in "script_content".
+2. DO NOT use Markdown in JSON. Only pure JSON.
+3. In "coherence_notes", list important facts that need to be maintained in the next chapters (characters, relationships, events, secrets, revelations, temporal context, etc.).
+4. Do not put the script text inside "coherence_notes". Use only summary sentences of the facts.
+5. 🚨 REMINDER: Write ALL content in ${language}. ${writeInLanguageInstruction}
 `;
 }
 
