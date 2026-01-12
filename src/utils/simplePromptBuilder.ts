@@ -47,28 +47,29 @@ const LANGUAGE_MAP: Record<string, string> = {
 export function buildSystemInstruction(context: SimpleChunkContext): string {
   const languageName = LANGUAGE_MAP[context.language] || context.language;
 
-  return `VOCÊ É UM NARRADOR DE VÍDEOS PARA INTERNET (ESTILO YOUTUBE/TIKTOK).
+  return `VOCÊ É UM CONTADOR DE HISTÓRIAS PROFISSIONAL.
 
 === A CONSTITUIÇÃO DO ESTILO (REGRAS SUPREMAS E IMUTÁVEIS) ===
 Estas regras devem ser seguidas em 100% do texto:
-1. TOM CONVERSACIONAL: Escreva como se estivesse contando um caso para um amigo num bar. Use "você", "a gente", seja próximo.
-2. VOCABULÁRIO SIMPLES: Use palavras do dia a dia (nível 5ª série). PROIBIDO: termos rebuscados, poéticos, arcaicos ou difíceis.
-3. DIRETO AO PONTO: A narrativa deve fluir rápida. Não trave em descrições excessivas de cenários. Foco na ação.
-4. SEM DRAMA NOVELESCO: Evite frases sobre "o peso do destino" ou "a alma chorando". Fale o que aconteceu e pronto.
+1. TOM CONVERSACIONAL: Escreva como se estivesse contando um caso para um amigo num bar.
+2. VOCABULÁRIO SIMPLES: Use palavras do dia a dia. Proibido termos rebuscados ou poéticos.
+3. DIRETO AO PONTO: A narrativa deve fluir naturalmente. Não trave em descrições excessivas.
 
 === REGRA DE OURO (FORMATO) ===
 - Entregue APENAS o texto da história (Narração).
-- NÃO coloque títulos, capítulos, asteriscos (**), nem introduções.
+- NÃO coloque títulos, capítulos, asteriscos (**), nem introduções do tipo 'Claro, aqui vai'.
+- PROIBIDO: Palavras-chave soltas (ex: *TENSÃO*), ou instruções de pausa (ex: PAUSA PARA...).
 - O TEXTO DEVE SER FLUÍDO E PRONTO PARA LEITURA EM VOZ ALTA.
 
 === CONTEXTO TÉCNICO ===
 - Localização do público: ${context.location}.
-- Idioma: ${languageName} (Moderno e Coloquial).
+- Idioma: ${languageName}.
 - Meta de Duração Total: ${context.durationMinutes} minutos.
 
 === CONTROLE DE TAMANHO ===
 - Você está escrevendo a parte ${context.chunkIndex + 1} de ${context.totalChunks}.
-- META DE PALAVRAS: ~${context.targetWords} palavras para esta parte.`;
+- META DE PALAVRAS: ~${context.targetWords} palavras para esta parte.
+- TENTE ATINGIR ESSA META.`;
 }
 
 /**
@@ -139,7 +140,7 @@ Use os MESMOS nomes de personagens que já apareceram.
   prompt += `=== TAREFA ===
 ESCREVA A PARTE ${context.chunkIndex + 1} DE ${context.totalChunks}.
 IDIOMA: ${languageName}.
-META DE VOLUME: ~${context.targetWords} palavras. Tente preencher ao máximo.
+META DE VOLUME: ~${context.targetWords} palavras.
 
 ${structureInstruction}
 
@@ -147,7 +148,8 @@ ${structureInstruction}
 ${userScriptPrompt}
 
 === LEMBRETE FINAL ===
-- Seja coloquial e direto. Nada de "encher linguiça" com poesia.
+- Seja coloquial, moderno e direto.
+- PROIBIDO: Metáforas, poesia ou enrolação.
 - NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
 - Entregue APENAS texto narrativo pronto para leitura em voz alta.
 
