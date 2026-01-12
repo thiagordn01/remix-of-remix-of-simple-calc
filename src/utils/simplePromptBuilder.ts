@@ -51,9 +51,9 @@ export function buildSystemInstruction(context: SimpleChunkContext): string {
 
 === A CONSTITUIÇÃO DO ESTILO (REGRAS SUPREMAS E IMUTÁVEIS) ===
 Estas regras devem ser seguidas em 100% do texto:
-1. DENSIDADE MÁXIMA: Escreva muito. Descreva cada segundo. Evite resumos.
-2. CAMERA LENTA: A narrativa deve ser lenta e detalhada, não apressada.
-3. "SHOW, DON'T TELL": Se alguém está com medo, descreva o suor, a respiração, o tremor, não diga apenas "ele teve medo".
+1. TOM CONVERSACIONAL: Escreva como se estivesse contando um caso para um amigo num bar.
+2. VOCABULÁRIO SIMPLES: Use palavras do dia a dia. Proibido termos rebuscados ou poéticos.
+3. DIRETO AO PONTO: A narrativa deve fluir naturalmente. Não trave em descrições excessivas.
 
 === REGRA DE OURO (FORMATO) ===
 - Entregue APENAS o texto da história (Narração).
@@ -75,10 +75,7 @@ Estas regras devem ser seguidas em 100% do texto:
 /**
  * Constrói o prompt para um chunk (estilo do sistema de referência)
  */
-export function buildSimpleChunkPrompt(
-  userScriptPrompt: string,
-  context: SimpleChunkContext
-): string {
+export function buildSimpleChunkPrompt(userScriptPrompt: string, context: SimpleChunkContext): string {
   const languageName = LANGUAGE_MAP[context.language] || context.language;
   const isFirst = context.chunkIndex === 0;
   const isLast = context.chunkIndex === context.totalChunks - 1;
@@ -200,11 +197,7 @@ export function cleanGeneratedText(text: string): string {
       }
 
       // Filtrar headers curtos em maiúsculas
-      if (
-        trimmed.endsWith(":") &&
-        trimmed.length < 40 &&
-        trimmed.toUpperCase() === trimmed
-      ) {
+      if (trimmed.endsWith(":") && trimmed.length < 40 && trimmed.toUpperCase() === trimmed) {
         return false;
       }
 
@@ -248,7 +241,10 @@ export function extractNarration(fullOutput: string): string {
   for (const marker of scriptMarkers) {
     const idx = cleaned.indexOf(marker);
     if (idx !== -1) {
-      return cleaned.substring(idx).replace(/^[#\-\s📝ROTEIRO()]+/g, "").trim();
+      return cleaned
+        .substring(idx)
+        .replace(/^[#\-\s📝ROTEIRO()]+/g, "")
+        .trim();
     }
   }
 
