@@ -1566,7 +1566,7 @@ export class EnhancedGeminiService {
     }
 
     const result = await this.generateWithFidelity(culturalPrompt, availableApis, context, {
-      temperature: 0.9,
+      temperature: 0.45,
       maxRetries: 3,
       timeoutMs: timeoutForChunk,
       maxTokens: maxTokensForChunk,
