@@ -148,7 +148,7 @@ ${structureInstruction}
 ${userScriptPrompt}
 
 === LEMBRETE FINAL ===
-- Descreva o invisível. Use metáforas. Encha o tempo.
+- Seja coloquial e direto. Nada de "encher linguiça" com poesia.
 - NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
 - Entregue APENAS texto narrativo pronto para leitura em voz alta.
 
