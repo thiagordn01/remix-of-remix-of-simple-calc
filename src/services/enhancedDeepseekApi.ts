@@ -1,8 +1,9 @@
-import { DeepseekApiKey } from '@/types/scripts';
+import { DeepseekApiKey } from "@/types/scripts";
 
 // Usar proxy do Supabase para evitar erro de CORS
 const SUPABASE_URL = "https://wzldbdmcozbmivztbmik.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6bGRiZG1jb3pibWl2enRibWlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxNzIxMjEsImV4cCI6MjA3Nzc0ODEyMX0.J7bG_ymiHUT47WIBEqR82PVRIyGfW1NoVNBOY1sOuBQ";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6bGRiZG1jb3pibWl2enRibWlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxNzIxMjEsImV4cCI6MjA3Nzc0ODEyMX0.J7bG_ymiHUT47WIBEqR82PVRIyGfW1NoVNBOY1sOuBQ";
 const DEEPSEEK_PROXY_URL = `${SUPABASE_URL}/functions/v1/deepseek-proxy`;
 
 interface GenerationOptions {
@@ -49,7 +50,7 @@ export class EnhancedDeepseekService {
   private apiLastRequestTime = new Map<string, number>();
 
   private constructor() {
-    console.log('EnhancedDeepseekService inicializado');
+    console.log("EnhancedDeepseekService inicializado");
   }
 
   static getInstance(): EnhancedDeepseekService {
@@ -76,7 +77,10 @@ export class EnhancedDeepseekService {
     const now = Date.now();
     const rpm = this.apiRequestsPerMinute.get(apiKey.id) || [];
     rpm.push(now);
-    this.apiRequestsPerMinute.set(apiKey.id, rpm.filter(t => now - t < 60000));
+    this.apiRequestsPerMinute.set(
+      apiKey.id,
+      rpm.filter((t) => now - t < 60000),
+    );
     this.apiLastRequestTime.set(apiKey.id, now);
 
     return true;
@@ -103,7 +107,7 @@ export class EnhancedDeepseekService {
     // Verificar falhas recentes
     const failures = this.apiFailureCount.get(apiKey.id) || 0;
     const lastFailure = this.apiLastFailure.get(apiKey.id) || 0;
-    if (lastFailure && (now - lastFailure) > this.FAILURE_RESET_TIME) {
+    if (lastFailure && now - lastFailure > this.FAILURE_RESET_TIME) {
       this.apiFailureCount.delete(apiKey.id);
       this.apiLastFailure.delete(apiKey.id);
     } else if (failures >= this.MAX_FAILURES_BEFORE_SKIP) {
@@ -131,10 +135,10 @@ export class EnhancedDeepseekService {
   }
 
   private selectNextApi(availableApis: DeepseekApiKey[]): DeepseekApiKey | null {
-    const usableApis = availableApis.filter(api => this.canUseApi(api));
+    const usableApis = availableApis.filter((api) => this.canUseApi(api));
 
     if (usableApis.length === 0) {
-      console.warn('Nenhuma API DeepSeek disponivel no momento');
+      console.warn("Nenhuma API DeepSeek disponivel no momento");
       return null;
     }
 
@@ -146,19 +150,14 @@ export class EnhancedDeepseekService {
     prompt: string,
     apiKey: DeepseekApiKey,
     options: GenerationOptions = {},
-    attemptNumber: number = 0
+    attemptNumber: number = 0,
   ): Promise<string> {
-    const {
-      temperature = 0.7,
-      maxTokens = 8192,
-      timeoutMs = 120000,
-      onProgress
-    } = options;
+    const { temperature = 0.7, maxTokens = 8192, timeoutMs = 120000, onProgress } = options;
 
     // Tentar obter lock
     const gotLock = await this.lockApi(apiKey);
     if (!gotLock) {
-      throw this.createApiError('API em uso por outra requisicao', undefined, true);
+      throw this.createApiError("API em uso por outra requisicao", undefined, true);
     }
 
     const controller = new AbortController();
@@ -169,45 +168,43 @@ export class EnhancedDeepseekService {
 
       // Usar proxy do Supabase para evitar CORS
       const response = await fetch(DEEPSEEK_PROXY_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'x-deepseek-api-key': apiKey.key
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "x-deepseek-api-key": apiKey.key,
         },
         body: JSON.stringify({
           model: apiKey.model,
-          messages: [
-            { role: "user", content: prompt }
-          ],
+          messages: [{ role: "user", content: prompt }],
           temperature,
           max_tokens: maxTokens,
-          stream: false
+          stream: false,
         }),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || 'Unknown error';
+        const errorMessage = errorData.error?.message || "Unknown error";
 
         console.error(`DeepSeek API Error [${apiKey.name}]:`, {
           status: response.status,
-          errorMessage
+          errorMessage,
         });
 
         let apiError: ApiError;
 
         if (response.status === 429) {
-          apiError = this.createApiError('Rate limit atingido', 429, true);
+          apiError = this.createApiError("Rate limit atingido", 429, true);
         } else if (response.status === 401) {
-          apiError = this.createApiError('API key invalida', 401, false);
+          apiError = this.createApiError("API key invalida", 401, false);
         } else if (response.status === 403) {
-          apiError = this.createApiError('Acesso negado', 403, false);
+          apiError = this.createApiError("Acesso negado", 403, false);
         } else if (response.status >= 500) {
-          apiError = this.createApiError('Erro no servidor DeepSeek', response.status, true);
+          apiError = this.createApiError("Erro no servidor DeepSeek", response.status, true);
         } else {
           apiError = this.createApiError(errorMessage, response.status, false);
         }
@@ -218,12 +215,12 @@ export class EnhancedDeepseekService {
       const data = await response.json();
 
       if (!data.choices || data.choices.length === 0) {
-        throw this.createApiError('Nenhum conteudo gerado', undefined, true);
+        throw this.createApiError("Nenhum conteudo gerado", undefined, true);
       }
 
       const content = data.choices[0].message?.content;
       if (!content || content.trim().length < 20) {
-        throw this.createApiError('Resposta muito curta ou vazia', undefined, true);
+        throw this.createApiError("Resposta muito curta ou vazia", undefined, true);
       }
 
       const wordCount = content.split(/\s+/).length;
@@ -231,11 +228,10 @@ export class EnhancedDeepseekService {
 
       onProgress?.(`Resposta recebida de ${apiKey.name} (${wordCount} palavras)`);
       return content;
-
     } catch (error: any) {
       clearTimeout(timeoutId);
 
-      if (error.name === 'AbortError') {
+      if (error.name === "AbortError") {
         throw this.createApiError(`Timeout na API ${apiKey.name}`, undefined, true);
       }
 
@@ -249,7 +245,7 @@ export class EnhancedDeepseekService {
     prompt: string,
     availableApis: DeepseekApiKey[],
     context: GenerationContext = {},
-    options: GenerationOptions = {}
+    options: GenerationOptions = {},
   ): Promise<{ content: string; usedApiId: string }> {
     const { maxRetries = 3, onProgress, validateResponse } = options;
 
@@ -262,8 +258,8 @@ export class EnhancedDeepseekService {
 
       if (!apiKey) {
         // Todas as APIs estao em cooldown, aguardar
-        onProgress?.('Todas as APIs em cooldown, aguardando...');
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        onProgress?.("Todas as APIs em cooldown, aguardando...");
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         attempts++;
         continue;
       }
@@ -273,12 +269,11 @@ export class EnhancedDeepseekService {
 
         // Validar resposta se houver funcao de validacao
         if (validateResponse && !validateResponse(content)) {
-          throw this.createApiError('Resposta nao passou na validacao', undefined, true);
+          throw this.createApiError("Resposta nao passou na validacao", undefined, true);
         }
 
         this.recordApiSuccess(apiKey);
         return { content, usedApiId: apiKey.id };
-
       } catch (error: any) {
         lastError = error;
         this.recordApiFailure(apiKey, error);
@@ -288,19 +283,19 @@ export class EnhancedDeepseekService {
         }
 
         // Delay entre tentativas
-        await new Promise(resolve => setTimeout(resolve, this.DELAY_BETWEEN_API_ATTEMPTS));
+        await new Promise((resolve) => setTimeout(resolve, this.DELAY_BETWEEN_API_ATTEMPTS));
         attempts++;
       }
     }
 
-    throw lastError || new Error('Todas as tentativas falharam');
+    throw lastError || new Error("Todas as tentativas falharam");
   }
 
   async generatePremise(
     prompt: string,
     availableApis: DeepseekApiKey[],
     targetWords: number = 1000,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string) => void,
   ): Promise<{ content: string; usedApiId: string }> {
     onProgress?.(`Iniciando geracao de premissa DeepSeek (${targetWords} palavras)`);
 
@@ -309,15 +304,15 @@ export class EnhancedDeepseekService {
       availableApis,
       { targetWords },
       {
-        temperature: 0.6,
+        temperature: 0.75,
         timeoutMs: 180000, // 3 minutos
         maxTokens: 40000,
         onProgress,
         validateResponse: (response) => {
-          const texto = response?.trim() || '';
+          const texto = response?.trim() || "";
           return texto.length >= 100;
-        }
-      }
+        },
+      },
     );
 
     onProgress?.(`Premissa gerada: ${result.content.split(/\s+/).length} palavras`);
@@ -328,25 +323,20 @@ export class EnhancedDeepseekService {
     prompt: string,
     availableApis: DeepseekApiKey[],
     context: GenerationContext,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string) => void,
   ): Promise<{ content: string; usedApiId: string }> {
     onProgress?.(`Gerando chunk ${(context.chunkIndex ?? 0) + 1}/${context.totalChunks ?? 1}`);
 
-    const result = await this.generateWithFidelity(
-      prompt,
-      availableApis,
-      context,
-      {
-        temperature: 0.7,
-        timeoutMs: 180000, // 3 minutos
-        maxTokens: 32000,
-        onProgress,
-        validateResponse: (response) => {
-          const texto = response?.trim() || '';
-          return texto.length >= 50;
-        }
-      }
-    );
+    const result = await this.generateWithFidelity(prompt, availableApis, context, {
+      temperature: 0.45,
+      timeoutMs: 180000, // 3 minutos
+      maxTokens: 32000,
+      onProgress,
+      validateResponse: (response) => {
+        const texto = response?.trim() || "";
+        return texto.length >= 50;
+      },
+    });
 
     const wordCount = result.content.split(/\s+/).length;
     onProgress?.(`Chunk gerado: ${wordCount} palavras`);
@@ -365,7 +355,7 @@ export class EnhancedDeepseekService {
 
     const failures = this.apiFailureCount.get(apiId) || 0;
     const lastFailure = this.apiLastFailure.get(apiId) || 0;
-    if (lastFailure && (now - lastFailure) < this.FAILURE_RESET_TIME && failures >= this.MAX_FAILURES_BEFORE_SKIP) {
+    if (lastFailure && now - lastFailure < this.FAILURE_RESET_TIME && failures >= this.MAX_FAILURES_BEFORE_SKIP) {
       return false;
     }
 
@@ -381,8 +371,7 @@ export class EnhancedDeepseekService {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
 
-    const rpmTimestamps = (this.apiRequestsPerMinute.get(apiId) || [])
-      .filter(t => t > oneMinuteAgo);
+    const rpmTimestamps = (this.apiRequestsPerMinute.get(apiId) || []).filter((t) => t > oneMinuteAgo);
 
     return { rpm: rpmTimestamps.length };
   }
