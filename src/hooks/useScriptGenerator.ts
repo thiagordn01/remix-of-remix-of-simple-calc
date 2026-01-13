@@ -198,9 +198,7 @@ export const useScriptGenerator = () => {
 
               if (!scriptText || wordCount < 200) {
                 currentErrorMessage = "Texto muito curto. Aprofunde mais o conteúdo/cena.";
-                console.warn(
-                  `[VALIDATOR] Chunk ${i + 1} rejeitado por texto curto ou vazio (${wordCount} palavras).`,
-                );
+                console.warn(`[VALIDATOR] Chunk ${i + 1} rejeitado por texto curto ou vazio (${wordCount} palavras).`);
                 continue;
               }
 
@@ -315,14 +313,14 @@ export const useScriptGenerator = () => {
             geminiChatService.createChat(sessionId, selectedApiKey, {
               systemInstruction: scriptSystemInstruction,
               maxOutputTokens: 8192,
-              temperature: 0.9
+              temperature: 0.9,
             });
           } else {
             // Puter/DeepSeek: também usa chat com histórico
             puterChatService.createChat(sessionId, {
               systemInstruction: scriptSystemInstruction,
               maxOutputTokens: 8192,
-              model: puterDeepseekService.getModel()
+              model: puterDeepseekService.getModel(),
             });
           }
 
@@ -379,13 +377,13 @@ export const useScriptGenerator = () => {
 
                 INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}
 
-                LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.
-                IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
+                - NÃO encha linguiça. Seja direto e mantenha o ritmo da narrativa.
               `;
 
               // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
               if (partNumber === 1) {
-                partPrompt = `
+                partPrompt =
+                  `
                 CONTEXTO (PREMISSA APROVADA):
                 ${premise}
 
@@ -400,13 +398,13 @@ export const useScriptGenerator = () => {
                 rawPart = await geminiChatService.sendMessage(sessionId, partPrompt, {
                   temperature: 0.9,
                   maxOutputTokens: 8192,
-                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`),
                 });
               } else {
                 // Puter/DeepSeek: também usa chat com histórico agora!
                 rawPart = await puterChatService.sendMessage(sessionId, partPrompt, {
                   maxOutputTokens: 8192,
-                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                  onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`),
                 });
               }
 
