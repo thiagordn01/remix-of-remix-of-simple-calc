@@ -891,8 +891,7 @@ function App() {
             
             INSTRUÇÕES DO USUÁRIO: ${formData.scriptPrompt}
             
-            LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.
-            IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
+            - NÃO encha linguiça. Seja direto e mantenha o ritmo da narrativa.
         `;
 
       if (part === 1) {
