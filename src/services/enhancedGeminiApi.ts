@@ -321,6 +321,25 @@ export class EnhancedGeminiService {
     };
   }
 
+  // ✅ NOVO: Registrar uso de API externa (chamado pelo geminiChatService para tracking de RPM/RPD)
+  public registerExternalApiUsage(apiId: string): void {
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+    const oneDayAgo = now - 86400000;
+
+    // Registrar timestamp RPM
+    const rpmTimestamps = (this.apiRequestsPerMinute.get(apiId) || []).filter((t) => t > oneMinuteAgo);
+    rpmTimestamps.push(now);
+    this.apiRequestsPerMinute.set(apiId, rpmTimestamps);
+
+    // Registrar timestamp RPD
+    const rpdTimestamps = (this.apiRequestsPerDay.get(apiId) || []).filter((t) => t > oneDayAgo);
+    rpdTimestamps.push(now);
+    this.apiRequestsPerDay.set(apiId, rpdTimestamps);
+
+    console.log(`📊 [External] API ${apiId} uso registrado - RPM: ${rpmTimestamps.length}, RPD: ${rpdTimestamps.length}`);
+  }
+
   // ✅ NOVO: Obter o menor tempo de espera entre todas as APIs
   public getShortestCooldownMs(apiIds: string[]): number | null {
     const now = Date.now();

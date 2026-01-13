@@ -6,10 +6,11 @@
  *
  * Isso é equivalente ao `ai.chats.create()` do SDK @google/genai.
  *
- * IMPORTANTE: Suporta rotação automática de APIs em caso de erro 429.
+ * IMPORTANTE: Suporta rotação automática de APIs em caso de erro 429 e 503.
  */
 
 import { GeminiApiKey } from '@/types/scripts';
+import { enhancedGeminiService } from './enhancedGeminiApi';
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -103,13 +104,13 @@ export class GeminiChatService {
   }
 
   /**
-   * Tenta chamar a API com rotação automática em caso de erro 429
+   * Tenta chamar a API com rotação automática em caso de erro 429, 503 e outros erros retryable
    */
   private async callWithRetry(
     session: ChatSession,
     temperature: number,
     maxOutputTokens: number,
-    maxRetries: number = 3
+    maxRetries: number = 10  // ✅ CORREÇÃO: Aumentado para suportar mais rotações
   ): Promise<string> {
     const availableApis = session.apiKeys.filter(
       api => !session.failedApis.has(api.key)
@@ -122,17 +123,31 @@ export class GeminiChatService {
     }
 
     let lastError: Error | null = null;
+    let totalAttempts = 0;
+    const MAX_TOTAL_ATTEMPTS = session.apiKeys.length * 2; // ✅ Máximo = 2x número de APIs
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // Seleciona próxima API disponível
+    while (totalAttempts < MAX_TOTAL_ATTEMPTS) {
+      totalAttempts++;
+
+      // Seleciona próxima API disponível (que não está em uso e não falhou)
       const apiKey = this.getNextAvailableApi(session);
 
       if (!apiKey) {
+        // Se todas APIs falharam, limpar e tentar novamente
+        if (session.failedApis.size > 0) {
+          console.log(`⚠️ [Tentativa ${totalAttempts}] Todas as ${session.failedApis.size} APIs falharam, aguardando 2s e resetando...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          session.failedApis.clear();
+          continue;
+        }
         throw new Error('Nenhuma API disponível para chat');
       }
 
       try {
-        console.log(`🔄 Tentativa ${attempt + 1}/${maxRetries} com API: ${apiKey.name}`);
+        console.log(`🔄 Tentativa ${totalAttempts}/${MAX_TOTAL_ATTEMPTS} com API: ${apiKey.name}`);
+
+        // ✅ CORREÇÃO: Registrar uso no enhancedGeminiService para tracking de RPM/RPD
+        enhancedGeminiService.registerExternalApiUsage(apiKey.id);
 
         const response = await this.callGeminiWithHistory(
           session,
@@ -146,40 +161,77 @@ export class GeminiChatService {
 
       } catch (error: any) {
         lastError = error;
-        const is429 = error.message?.includes('429') || error.message?.includes('quota');
+        const errorMessage = error.message || '';
 
-        if (is429) {
-          console.log(`⚠️ API ${apiKey.name} retornou 429, marcando como indisponível`);
+        // ✅ CORREÇÃO: Detectar TODOS os erros retryable (429, 503, 500, 502, 504, timeout, network)
+        const is429 = errorMessage.includes('429') || errorMessage.includes('quota');
+        const is503 = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('unavailable');
+        const isServerError = errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('504');
+        const isNetworkError = errorMessage.includes('timeout') || errorMessage.includes('network') || errorMessage.includes('ECONNRESET');
+
+        const isRetryable = is429 || is503 || isServerError || isNetworkError;
+
+        if (isRetryable) {
+          // ✅ CORREÇÃO: Log detalhado do tipo de erro
+          if (is429) {
+            console.log(`⚠️ API ${apiKey.name} retornou 429 (rate limit), marcando como temporariamente indisponível`);
+          } else if (is503) {
+            console.log(`⚠️ API ${apiKey.name} retornou 503 (modelo sobrecarregado), tentando próxima API`);
+          } else if (isServerError) {
+            console.log(`⚠️ API ${apiKey.name} retornou erro de servidor (${errorMessage.slice(0, 50)}), tentando próxima API`);
+          } else {
+            console.log(`⚠️ API ${apiKey.name} erro de rede (${errorMessage.slice(0, 50)}), tentando próxima API`);
+          }
+
           session.failedApis.add(apiKey.key);
           session.currentApiIndex++;
 
-          // Aguarda um pouco antes de tentar próxima API
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // ✅ CORREÇÃO: Delay variável baseado no tipo de erro
+          const delayMs = is429 ? 2000 : is503 ? 500 : 1000;
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         } else {
-          // Erro não relacionado a quota, propaga imediatamente
+          // Erro não recuperável (401, 403, safety filter, etc.)
+          console.error(`❌ API ${apiKey.name} erro não recuperável: ${errorMessage}`);
           throw error;
         }
       }
     }
 
-    throw lastError || new Error('Falha ao chamar API após múltiplas tentativas');
+    throw lastError || new Error(`Falha ao chamar API após ${totalAttempts} tentativas em ${session.apiKeys.length} APIs`);
   }
 
   /**
-   * Obtém próxima API disponível (que não falhou com 429)
+   * Obtém próxima API disponível (que não falhou e está disponível no enhancedGeminiService)
    */
   private getNextAvailableApi(session: ChatSession): GeminiApiKey | null {
-    const availableApis = session.apiKeys.filter(
+    // Primeiro filtro: APIs que não falharam nesta sessão
+    const notFailedApis = session.apiKeys.filter(
       api => !session.failedApis.has(api.key)
     );
 
-    if (availableApis.length === 0) {
+    if (notFailedApis.length === 0) {
       return null;
     }
 
-    // Rotaciona entre APIs disponíveis
-    const index = session.currentApiIndex % availableApis.length;
-    return availableApis[index];
+    // ✅ CORREÇÃO: Segundo filtro - APIs que estão realmente disponíveis (não em cooldown/exauridas)
+    const trulyAvailableApis = notFailedApis.filter(
+      api => enhancedGeminiService.isKeyAvailable(api.id)
+    );
+
+    // Se há APIs realmente disponíveis, usar uma delas
+    if (trulyAvailableApis.length > 0) {
+      const index = session.currentApiIndex % trulyAvailableApis.length;
+      const selectedApi = trulyAvailableApis[index];
+      console.log(`🎯 API selecionada: ${selectedApi.name} (${trulyAvailableApis.length} disponíveis de ${notFailedApis.length} não-falhadas)`);
+      return selectedApi;
+    }
+
+    // ✅ FALLBACK: Se nenhuma está "truly available", usar qualquer uma não-falhada
+    // (pode estar em cooldown curto - o retry irá lidar)
+    const index = session.currentApiIndex % notFailedApis.length;
+    const fallbackApi = notFailedApis[index];
+    console.log(`⚠️ API fallback: ${fallbackApi.name} (0 disponíveis, usando não-falhada)`);
+    return fallbackApi;
   }
 
   /**
