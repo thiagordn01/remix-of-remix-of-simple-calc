@@ -72,7 +72,8 @@ WORK CONTEXT:
 
 CURRENT TASK:
 Write CHAPTER ${chunkIndex + 1} of ${totalChunks}.
-Target length: ~${targetWords} words.
+⚠️ WORD LIMIT: MAXIMUM ${targetWords} words. DO NOT EXCEED!
+Write between ${Math.round(targetWords * 0.85)} and ${targetWords} words.
 
 ${chunkIndex > 0 ? `PREVIOUS SUMMARY: ...${extractLastParagraph(previousContent || "")}` : "BEGINNING OF THE STORY."}
 
