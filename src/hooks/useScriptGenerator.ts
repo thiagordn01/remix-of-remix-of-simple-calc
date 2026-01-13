@@ -13,6 +13,7 @@ import { enhancedGeminiService } from "@/services/enhancedGeminiApi";
 import { puterDeepseekService } from "@/services/puterDeepseekService";
 import { buildMinimalChunkPrompt, sanitizeScript } from "@/utils/minimalPromptBuilder";
 import { cleanFinalScript, cleanScriptRepetitions, truncateAfterEnding } from "@/utils/scriptCleanup";
+import { getLanguageWPM } from "@/utils/languageDetection";
 import { useToast } from "@/hooks/use-toast";
 import { geminiChatService } from "@/services/geminiChatService";
 import { puterChatService } from "@/services/puterChatService";
@@ -108,7 +109,10 @@ export const useScriptGenerator = () => {
         const detectedChapters = chapterMatches ? chapterMatches.length : 0;
         const fallbackChunks = Math.max(1, Math.ceil(config.duration / 8));
         const numberOfChunks = detectedChapters > 0 ? detectedChapters : fallbackChunks;
-        const targetWordsTotal = config.duration * 140;
+
+        // ✅ CORREÇÃO: Usar WPM específico do idioma em vez de valor fixo
+        const languageWPM = getLanguageWPM(detectedLanguage);
+        const targetWordsTotal = config.duration * languageWPM;
         const wordsPerChunk = Math.ceil(targetWordsTotal / numberOfChunks);
 
         let scriptContentFull = "";
@@ -271,8 +275,8 @@ export const useScriptGenerator = () => {
           // Usa ai.chats.create() equivalente - a IA NUNCA perde contexto
           // ==========================
 
-          // Parâmetros espelhando o sistema de referência
-          const wpm = 150;
+          // ✅ CORREÇÃO: Usar WPM específico do idioma em vez de valor fixo
+          const wpm = getLanguageWPM(detectedLanguage);
           const minutesPerPart = 10;
           const totalParts = Math.max(1, Math.ceil(config.duration / minutesPerPart));
           const totalWordsTarget = config.duration * wpm;
@@ -300,10 +304,11 @@ export const useScriptGenerator = () => {
             - Idioma: ${detectedLanguage}.
             - Meta de Duração Total: ${config.duration} minutos.
 
-            === CONTROLE DE TAMANHO (MECÂNICA) ===
+            === CONTROLE DE TAMANHO (REGRA CRÍTICA) ===
             - Você está escrevendo partes de um total de ${totalParts} partes.
-            - META DE PALAVRAS POR PARTE: MÁXIMO DE ${wordsPerPart} palavras.
-            - NÃO ULTRAPASSE, MAS TENTE ATINGIR ESSA META.
+            - LIMITE MÁXIMO POR PARTE: ${wordsPerPart} palavras.
+            - ⚠️ NUNCA ULTRAPASSE ESTE LIMITE. Escreva entre ${Math.round(wordsPerPart * 0.85)} e ${wordsPerPart} palavras.
+            - Se precisar de mais espaço, deixe para a próxima parte.
           `;
 
           // Cria sessão de chat única para todo o roteiro
@@ -373,13 +378,14 @@ export const useScriptGenerator = () => {
               let partPrompt = `
                 ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.
 
-                META DE VOLUME: ~${wordsPerPart} palavras. Tente preencher ao máximo.
+                ⚠️ LIMITE DE PALAVRAS: MÁXIMO ${wordsPerPart} palavras. NÃO ULTRAPASSE!
+                Escreva entre ${Math.round(wordsPerPart * 0.85)} e ${wordsPerPart} palavras.
 
                 ${structureInstruction}
 
                 INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}
 
-                LEMBRE-SE: Descreva o invisível. Use metáforas. Encha o tempo.
+                LEMBRE-SE: Descreva o invisível. Use metáforas. Seja detalhista mas respeite o limite de palavras.
                 IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
               `;
 
@@ -452,7 +458,9 @@ export const useScriptGenerator = () => {
         }));
 
         const totalWords = finalChunks.reduce((sum, chunk) => sum + chunk.wordCount, 0);
-        const estimatedDuration = totalWords / 150;
+        // ✅ CORREÇÃO: Usar WPM específico do idioma para estimativa precisa
+        const finalWPM = getLanguageWPM(detectedLanguage);
+        const estimatedDuration = totalWords / finalWPM;
 
         const finalResult: ScriptGenerationResult = {
           premise,
