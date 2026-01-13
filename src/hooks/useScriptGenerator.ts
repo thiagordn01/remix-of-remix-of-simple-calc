@@ -222,7 +222,7 @@ export const useScriptGenerator = () => {
 
               INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}
 
-              LEMBRE-SE: Descreva o invisível. Use metáforas. Seja detalhista mas respeite o limite de palavras.
+              - NÃO encha linguiça. Seja direto e mantenha o ritmo da narrativa.
               IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
             `;
 
