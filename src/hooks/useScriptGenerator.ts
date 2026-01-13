@@ -125,27 +125,18 @@ export const useScriptGenerator = () => {
           throw new Error("Nenhuma API key disponível");
         }
 
-        // System instruction igual ao sistema de referência
+        // System instruction simplificado - deixa o prompt do usuário guiar
         const scriptSystemInstruction = `
-          Você é um roteirista profissional especializado em narrativas imersivas para canais do YouTube.
-          Sua tarefa é escrever partes de um roteiro em um fluxo contínuo.
+          Você é um roteirista de YouTube.
+          Escreva em linguagem FALADA, casual, como se estivesse contando para um amigo.
+          Frases curtas e diretas. Nada de poesia ou descrições elaboradas.
 
-          === REGRAS DE FORMATAÇÃO ===
-          - Entregue APENAS o texto da história (Narração).
-          - NÃO coloque títulos, capítulos, asteriscos (**), nem introduções do tipo 'Claro, aqui vai'.
-          - PROIBIDO: Palavras-chave soltas (ex: *TENSÃO*), ou instruções de pausa (ex: PAUSA PARA...).
-          - O TEXTO DEVE SER FLUÍDO E PRONTO PARA LEITURA EM VOZ ALTA.
-
-          === CONTEXTO TÉCNICO ===
-          - Localização do público: ${config.location}.
+          REGRAS:
+          - Entregue APENAS o texto da narração.
+          - NÃO use títulos, capítulos, asteriscos (**), nem "Claro, aqui vai".
           - Idioma: ${detectedLanguage}.
-          - Meta de Duração Total: ${config.duration} minutos.
-
-          === CONTROLE DE TAMANHO (REGRA CRÍTICA) ===
-          - Você está escrevendo partes de um total de ${totalParts} partes.
-          - LIMITE MÁXIMO POR PARTE: ${wordsPerPart} palavras.
-          - ⚠️ NUNCA ULTRAPASSE ESTE LIMITE. Escreva entre ${Math.round(wordsPerPart * 0.85)} e ${wordsPerPart} palavras.
-          - Se precisar de mais espaço, deixe para a próxima parte.
+          - Duração total: ${config.duration} minutos.
+          - Você vai escrever ${totalParts} partes de ~${wordsPerPart} palavras cada.
         `;
 
         // Cria sessão de chat única para todo o roteiro
@@ -183,47 +174,11 @@ export const useScriptGenerator = () => {
               message: `Escrevendo parte ${partNumber}/${totalParts} (chat com memória)...`,
             });
 
-            // Estrutura mental igual ao sistema de referência
-            let structureInstruction = "";
-            if (partNumber === 1) {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido, sem headers visíveis:
-              1. (Mentalmente) Gancho e Introdução Imersiva (0-3 min) - Descreva o ambiente e o "status quo".
-              2. (Mentalmente) Desenvolvimento do Contexto (3-6 min) - Explique os antecedentes sem pressa.
-              3. (Mentalmente) O Incidente Incitante (6-10 min) - O momento da mudança, narrado em câmera lenta.
-              `;
-            } else if (partNumber === totalParts) {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-              1. (Mentalmente) O Grande Clímax (Parte Inicial) - A tensão sobe ao máximo.
-              2. (Mentalmente) O Ápice e a Queda - O ponto de não retorno.
-              3. (Mentalmente) Resolução e Reflexão (Fim) - As consequências e a mensagem final duradoura.
-              `;
-            } else {
-              structureInstruction = `
-              ESTRUTURA INTERNA MENTAL (GUIE-SE POR AQUI, MAS NÃO IMPRIMA OS TÍTULOS):
-              Divida o fluxo em 3 momentos, mas escreva como um texto único e corrido:
-              1. (Mentalmente) Novos Obstáculos - A situação piora. Detalhe as dificuldades.
-              2. (Mentalmente) Aprofundamento Emocional - O que os personagens sentem? Use monólogos internos.
-              3. (Mentalmente) A Virada - Uma nova informação ou evento muda tudo.
-              `;
-            }
-
-            // Monta prompt da parte
+            // Prompt simplificado - deixa o usuário guiar
             let partPrompt = `
-              ESCREVA A PARTE ${partNumber} DE ${totalParts}. IDIOMA: ${detectedLanguage}.
+              PARTE ${partNumber} DE ${totalParts}. ~${wordsPerPart} palavras.
 
-              ⚠️ LIMITE DE PALAVRAS: MÁXIMO ${wordsPerPart} palavras. NÃO ULTRAPASSE!
-              Escreva entre ${Math.round(wordsPerPart * 0.85)} e ${wordsPerPart} palavras.
-
-              ${structureInstruction}
-
-              INSTRUÇÕES DO USUÁRIO: ${config.scriptPrompt}
-
-              - NÃO encha linguiça. Seja direto e mantenha o ritmo da narrativa.
-              IMPORTANTE: NÃO ESCREVA OS NOMES DOS TÓPICOS ACIMA. APENAS A NARRAÇÃO.
+              ${config.scriptPrompt}
             `;
 
             // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
