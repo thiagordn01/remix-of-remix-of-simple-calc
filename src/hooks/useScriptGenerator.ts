@@ -128,16 +128,8 @@ export const useScriptGenerator = () => {
 
         // System instruction simplificado - deixa o prompt do usuário guiar
         const scriptSystemInstruction = `
-          Você é um roteirista de YouTube escrevendo para NARRAÇÃO em voz.
-          Escreva em linguagem FALADA, casual, como se estivesse contando para um amigo.
-          Nada de poesia ou descrições elaboradas.
-
-          ESTILO DE NARRAÇÃO (MUITO IMPORTANTE):
-          - CONECTE as frases usando vírgulas, "e", "mas", "então", travessões.
-          - EVITE frases muito curtas terminando em ponto. Isso cria pausas demais na narração.
-          - O texto deve FLUIR naturalmente quando lido em voz alta.
-          - RUIM: "Ela correu. Ele seguiu. Era tarde."
-          - BOM: "Ela correu e ele seguiu, mas já era tarde."
+          Você é um roteirista de YouTube.
+          Escreva texto para NARRAÇÃO em voz alta. Deve fluir naturalmente.
 
           REGRAS:
           - Entregue APENAS o texto da narração.
