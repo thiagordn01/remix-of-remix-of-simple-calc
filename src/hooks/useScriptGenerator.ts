@@ -134,6 +134,7 @@ export const useScriptGenerator = () => {
           REGRAS:
           - Entregue APENAS o texto da narração.
           - NÃO use títulos, capítulos, asteriscos (**), nem "Claro, aqui vai".
+          - Conecte as frases com fluidez. Evite pontos finais demais. Texto narrado precisa fluir bem.
           - Idioma: ${detectedLanguage}.
           - Duração total: ${config.duration} minutos.
           - Você vai escrever ${totalParts} partes de ~${wordsPerPart} palavras cada.
