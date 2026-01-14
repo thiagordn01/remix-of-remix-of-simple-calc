@@ -116,7 +116,8 @@ export const useScriptGenerator = () => {
         const wpm = getLanguageWPM(detectedLanguage);
         const minutesPerPart = 10;
         const totalParts = Math.max(1, Math.ceil(config.duration / minutesPerPart));
-        const totalWordsTarget = config.duration * wpm;
+        // Usar 90% do target para evitar excesso (Gemini tende a escrever mais)
+        const totalWordsTarget = Math.round(config.duration * wpm * 0.90);
         const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
         // Seleciona API key para esta sessão
@@ -127,17 +128,23 @@ export const useScriptGenerator = () => {
 
         // System instruction simplificado - deixa o prompt do usuário guiar
         const scriptSystemInstruction = `
-          Você é um roteirista de YouTube.
+          Você é um roteirista de YouTube escrevendo para NARRAÇÃO em voz.
           Escreva em linguagem FALADA, casual, como se estivesse contando para um amigo.
-          Frases curtas e diretas. Nada de poesia ou descrições elaboradas.
+          Nada de poesia ou descrições elaboradas.
+
+          ESTILO DE NARRAÇÃO (MUITO IMPORTANTE):
+          - CONECTE as frases usando vírgulas, "e", "mas", "então", travessões.
+          - EVITE frases muito curtas terminando em ponto. Isso cria pausas demais na narração.
+          - O texto deve FLUIR naturalmente quando lido em voz alta.
+          - RUIM: "Ela correu. Ele seguiu. Era tarde."
+          - BOM: "Ela correu e ele seguiu, mas já era tarde."
 
           REGRAS:
           - Entregue APENAS o texto da narração.
           - NÃO use títulos, capítulos, asteriscos (**), nem "Claro, aqui vai".
-          - Conecte as frases com fluidez. Evite pontos finais demais. Texto narrado precisa fluir bem.
           - Idioma: ${detectedLanguage}.
           - Duração total: ${config.duration} minutos.
-          - Você vai escrever ${totalParts} partes de ~${wordsPerPart} palavras cada.
+          - Você vai escrever ${totalParts} partes de MÁXIMO ${wordsPerPart} palavras cada.
         `;
 
         // Cria sessão de chat única para todo o roteiro
@@ -177,7 +184,7 @@ export const useScriptGenerator = () => {
 
             // Prompt simplificado - deixa o usuário guiar
             let partPrompt = `
-              PARTE ${partNumber} DE ${totalParts}. ~${wordsPerPart} palavras.
+              PARTE ${partNumber} DE ${totalParts}. MÁXIMO ${wordsPerPart} palavras (não exceda).
 
               ${config.scriptPrompt}
             `;
