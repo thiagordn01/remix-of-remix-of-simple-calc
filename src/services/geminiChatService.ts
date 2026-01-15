@@ -163,13 +163,14 @@ export class GeminiChatService {
         lastError = error;
         const errorMessage = error.message || '';
 
-        // ✅ CORREÇÃO: Detectar TODOS os erros retryable (429, 503, 500, 502, 504, timeout, network)
+        // ✅ CORREÇÃO: Detectar TODOS os erros retryable (429, 503, 500, 502, 504, timeout, network, resposta vazia)
         const is429 = errorMessage.includes('429') || errorMessage.includes('quota');
         const is503 = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('unavailable');
         const isServerError = errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('504');
         const isNetworkError = errorMessage.includes('timeout') || errorMessage.includes('network') || errorMessage.includes('ECONNRESET');
+        const isEmptyResponse = errorMessage.toLowerCase().includes('resposta vazia') || errorMessage.toLowerCase().includes('empty response');
 
-        const isRetryable = is429 || is503 || isServerError || isNetworkError;
+        const isRetryable = is429 || is503 || isServerError || isNetworkError || isEmptyResponse;
 
         if (isRetryable) {
           // ✅ CORREÇÃO: Log detalhado do tipo de erro
@@ -179,6 +180,8 @@ export class GeminiChatService {
             console.log(`⚠️ API ${apiKey.name} retornou 503 (modelo sobrecarregado), tentando próxima API`);
           } else if (isServerError) {
             console.log(`⚠️ API ${apiKey.name} retornou erro de servidor (${errorMessage.slice(0, 50)}), tentando próxima API`);
+          } else if (isEmptyResponse) {
+            console.log(`⚠️ API ${apiKey.name} retornou resposta vazia, tentando próxima API`);
           } else {
             console.log(`⚠️ API ${apiKey.name} erro de rede (${errorMessage.slice(0, 50)}), tentando próxima API`);
           }
@@ -187,7 +190,7 @@ export class GeminiChatService {
           session.currentApiIndex++;
 
           // ✅ CORREÇÃO: Delay variável baseado no tipo de erro
-          const delayMs = is429 ? 2000 : is503 ? 500 : 1000;
+          const delayMs = is429 ? 2000 : (is503 || isEmptyResponse) ? 500 : 1000;
           await new Promise(resolve => setTimeout(resolve, delayMs));
         } else {
           // Erro não recuperável (401, 403, safety filter, etc.)
