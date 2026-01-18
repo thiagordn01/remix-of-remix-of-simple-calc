@@ -37,6 +37,27 @@ function parseAIResponse(content: string): CoherentScriptResponse | null {
   }
 }
 
+// Marcador de início do roteiro - usado para separar "thinking" do conteúdo real
+const SCRIPT_START_MARKER = '[INICIO_ROTEIRO]';
+
+/**
+ * Extrai apenas o conteúdo do roteiro após o marcador de início.
+ * Isso permite que a IA "pense" (thinking) sem que esse conteúdo vaze para o roteiro final.
+ * Se o marcador não for encontrado, retorna o texto original (fallback seguro).
+ */
+function extractAfterMarker(response: string): string {
+  const index = response.indexOf(SCRIPT_START_MARKER);
+
+  if (index !== -1) {
+    const extracted = response.slice(index + SCRIPT_START_MARKER.length).trim();
+    console.log(`✅ Marcador encontrado - extraído conteúdo limpo (${extracted.length} chars)`);
+    return extracted;
+  }
+
+  // Fallback: retorna tudo se não encontrar a tag (comportamento anterior)
+  return response;
+}
+
 export const useScriptGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<ScriptGenerationProgress | null>(null);
@@ -138,6 +159,13 @@ export const useScriptGenerator = () => {
           - Idioma: ${detectedLanguage}.
           - Duração total: ${config.duration} minutos.
           - Você vai escrever ${totalParts} partes de ~${wordsPerPart} palavras cada.
+
+          IMPORTANTE - FORMATO DE SAÍDA:
+          Você pode planejar e pensar internamente, mas quando for entregar o texto do roteiro,
+          SEMPRE comece com a tag ${SCRIPT_START_MARKER} e depois escreva o texto corrido.
+          Exemplo:
+          ${SCRIPT_START_MARKER}
+          O sol nascia sobre a cidade quando Maria decidiu que aquele seria o dia...
         `;
 
         // Cria sessão de chat única para todo o roteiro
@@ -209,6 +237,9 @@ export const useScriptGenerator = () => {
               });
             }
 
+            // ✅ CORREÇÃO: Extrai apenas o conteúdo após o marcador [INICIO_ROTEIRO]
+            // Isso remove qualquer "thinking" ou planejamento que a IA possa ter vazado
+            rawPart = extractAfterMarker(rawPart);
             rawPart = sanitizeScript(rawPart).trim();
             if (!rawPart) {
               console.warn(`Parte ${partNumber}/${totalParts} veio vazia.`);
