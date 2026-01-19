@@ -270,30 +270,52 @@ export class GeminiChatService {
       };
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+    // ✅ CORREÇÃO: Adicionar timeout de 180s para evitar travamento infinito
+    const TIMEOUT_MS = 180000; // 3 minutos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log(`⏱️ Timeout de ${TIMEOUT_MS}ms atingido para API ${apiKey.name}`);
+      controller.abort();
+    }, TIMEOUT_MS);
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Gemini API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
       }
-    );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Gemini API Error: ${response.status} - ${errorData.error?.message || 'Unknown'}`);
+      const data = await response.json();
+
+      // Extrair texto da resposta
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!text) {
+        throw new Error('Resposta vazia da API Gemini');
+      }
+
+      return text;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      // Converter erro de abort para timeout
+      if (error.name === 'AbortError') {
+        throw new Error(`Timeout: API ${apiKey.name} não respondeu em ${TIMEOUT_MS / 1000}s`);
+      }
+
+      throw error;
     }
-
-    const data = await response.json();
-
-    // Extrair texto da resposta
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    if (!text) {
-      throw new Error('Resposta vazia da API Gemini');
-    }
-
-    return text;
   }
 
   /**
