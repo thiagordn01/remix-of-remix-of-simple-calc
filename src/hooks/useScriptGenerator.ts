@@ -140,9 +140,8 @@ export const useScriptGenerator = () => {
         const totalWordsTarget = config.duration * wpm;
         const wordsPerPart = Math.max(300, Math.round(totalWordsTarget / totalParts));
 
-        // Seleciona API key para esta sessão
-        const selectedApiKey = activeGeminiKeys[0];
-        if (!selectedApiKey) {
+        // ✅ CORREÇÃO: Usar TODAS as APIs ativas para permitir rotação automática
+        if (activeGeminiKeys.length === 0) {
           throw new Error("Nenhuma API key disponível");
         }
 
@@ -173,8 +172,9 @@ export const useScriptGenerator = () => {
         const sessionId = `script-${Date.now()}-${crypto.randomUUID()}`;
 
         // Cria sessão de chat com histórico para ambos os providers
+        // ✅ CORREÇÃO: Passa TODAS as APIs ativas para permitir rotação em caso de erro 429/503
         if (provider === "gemini") {
-          geminiChatService.createChat(sessionId, selectedApiKey, {
+          geminiChatService.createChat(sessionId, activeGeminiKeys, {
             systemInstruction: scriptSystemInstruction,
             maxOutputTokens: 8192,
             temperature: 0.9
@@ -297,8 +297,8 @@ export const useScriptGenerator = () => {
         setResult(finalResult);
         setProgress({
           stage: "script",
-          currentChunk: numberOfChunks,
-          totalChunks: numberOfChunks,
+          currentChunk: totalParts,
+          totalChunks: totalParts,
           completedWords: totalWords,
           targetWords: totalWords,
           isComplete: true,
