@@ -298,11 +298,20 @@ export class GeminiChatService {
 
       const data = await response.json();
 
-      // Extrair texto da resposta
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      // ✅ CORREÇÃO: Extrair texto de TODAS as partes (Gemini 3 com thinking retorna múltiplas parts)
+      // parts[0] pode ser { thought: "..." } e parts[1] ser { text: "..." }
+      const parts = data.candidates?.[0]?.content?.parts;
+      if (!parts || parts.length === 0) {
+        throw new Error('Resposta vazia da API Gemini - sem partes');
+      }
+
+      // Concatena texto de todas as partes (ignora thought, pega apenas text)
+      const text = parts.map((part: any) => part.text || '').join('').trim();
 
       if (!text) {
-        throw new Error('Resposta vazia da API Gemini');
+        // Log para debug: mostrar estrutura das partes quando vazio
+        console.log('⚠️ Partes da resposta sem texto:', JSON.stringify(parts.map((p: any) => Object.keys(p)), null, 2));
+        throw new Error('Resposta vazia da API Gemini - partes sem texto');
       }
 
       return text;
