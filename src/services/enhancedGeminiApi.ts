@@ -337,8 +337,33 @@ export class EnhancedGeminiService {
     rpdTimestamps.push(now);
     this.apiRequestsPerDay.set(apiId, rpdTimestamps);
 
-    console.log(`📊 [External] API ${apiId} uso registrado - RPM: ${rpmTimestamps.length}, RPD: ${rpdTimestamps.length}`);
+    console.log(
+      `📊 [External] API ${apiId} uso registrado - RPM: ${rpmTimestamps.length}, RPD: ${rpdTimestamps.length}`,
+    );
   }
+
+  // No arquivo: src/services/enhancedGeminiApi.ts
+
+  // ... (dentro da classe EnhancedGeminiService)
+
+  // ✅ NOVO: Permite que serviços externos (como o Chat) reportem erro numa chave
+  public reportExternalError(apiId: string, error: any) {
+    const apiKey = { id: apiId, name: "External", key: "...", model: "unknown" } as GeminiApiKey;
+
+    // Converter erro genérico em ApiError se necessário
+    const apiError = isApiError(error) ? error : this.createApiError(error.message || "External Error", error.status);
+
+    // Registrar falha (vai ativar bloqueios/quarentena se necessário)
+    this.recordApiFailure(apiKey, apiError);
+
+    // Se for 429, forçar cooldown imediato
+    if (error.message?.includes("429") || error.status === 429) {
+      this.keyCooldownUntil.set(apiId, Date.now() + 60000); // 1 min cooldown
+      console.log(`📉 [External Report] API ${apiId} marcada com 429 pelo Chat`);
+    }
+  }
+
+  // ...
 
   // ✅ NOVO: Obter o menor tempo de espera entre todas as APIs
   public getShortestCooldownMs(apiIds: string[]): number | null {
