@@ -28,11 +28,7 @@ interface GenerationContext {
   isLastChunk?: boolean;
 }
 
-interface ApiError extends Error {
-  code?: string;
-  status?: number;
-  retryable?: boolean;
-}
+import { ApiError } from "@/types/api";
 
 export class EnhancedDeepseekService {
   private static instance: EnhancedDeepseekService;
@@ -61,9 +57,7 @@ export class EnhancedDeepseekService {
   }
 
   private createApiError(message: string, status?: number, retryable = false): ApiError {
-    const error = new Error(message) as ApiError;
-    error.status = status;
-    error.retryable = retryable;
+    const error = new ApiError(message, status, retryable);
     return error;
   }
 

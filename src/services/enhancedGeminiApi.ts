@@ -1,22 +1,11 @@
 import { GeminiApiKey } from "@/types/scripts";
 import { getLanguageByCode } from "../data/languages";
 
-// Interface ApiError definida localmente para evitar problemas de build
-export interface ApiError extends Error {
-  code?: string;
-  status?: number;
-  retryable?: boolean;
-  quotaInfo?: {
-    quotaId: string;
-    quotaMetric: string;
-    quotaValue: string;
-    retryDelay?: number; // em segundos
-  };
-}
+import { ApiError } from '@/types/api';
 
 // Type guard para ApiError
 function isApiError(err: any): err is ApiError {
-  return !!err && typeof err === "object" && ("code" in err || "status" in err || "retryable" in err);
+  return err instanceof ApiError;
 }
 
 interface GenerationOptions {
@@ -460,11 +449,12 @@ export class EnhancedGeminiService {
     retryable = true,
     quotaInfo?: ApiError["quotaInfo"],
   ): ApiError {
-    const error = Object.assign(new Error(message), {
+    const error = new ApiError({
+      message,
       status,
       retryable,
-      quotaInfo,
-    }) as ApiError;
+      quotaInfo
+    });
 
     if (status === 429) {
       error.code = "RATE_LIMIT";
