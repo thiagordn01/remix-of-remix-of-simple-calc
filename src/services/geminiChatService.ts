@@ -263,12 +263,13 @@ export class GeminiChatService {
       };
     }
 
-    // Configuração para modelos Thinking (Gemini 3)
-    if (apiKey.model.includes("gemini-3")) {
-      requestBody.generationConfig.thinkingConfig = {
-        thinkingLevel: "HIGH",
-      };
-    }
+    // ✅ DESATIVADO PARA TESTE: Configuração para modelos Thinking (Gemini 3)
+    // O modo thinking pode estar causando respostas vazias/503 no chat com histórico
+    // if (apiKey.model.includes("gemini-3")) {
+    //   requestBody.generationConfig.thinkingConfig = {
+    //     thinkingLevel: "HIGH",
+    //   };
+    // }
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
