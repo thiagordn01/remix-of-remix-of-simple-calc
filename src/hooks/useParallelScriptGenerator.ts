@@ -34,6 +34,27 @@ import { puterChatService } from '@/services/puterChatService';
 // Mudar para true para ativar o novo sistema minimalista
 const USE_MINIMAL_PROMPT = true;
 
+// Marcador de início do roteiro - usado para separar "thinking" do conteúdo real
+const SCRIPT_START_MARKER = "[INICIO_ROTEIRO]";
+
+/**
+ * Extrai apenas o conteúdo do roteiro após o marcador de início.
+ * Isso permite que a IA "pense" (thinking) sem que esse conteúdo vaze para o roteiro final.
+ * Se o marcador não for encontrado, retorna o texto original (fallback seguro).
+ */
+function extractAfterMarker(response: string): string {
+  const index = response.indexOf(SCRIPT_START_MARKER);
+
+  if (index !== -1) {
+    const extracted = response.slice(index + SCRIPT_START_MARKER.length).trim();
+    console.log(`✅ Marcador encontrado - extraído conteúdo limpo (${extracted.length} chars)`);
+    return extracted;
+  }
+
+  // Fallback: retorna tudo se não encontrar a tag (comportamento anterior)
+  return response;
+}
+
 export interface GenerationJob {
   id: string;
   title: string;
@@ -515,6 +536,13 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
           - You are writing parts of a total of ${totalParts} parts.
           - TARGET WORDS PER PART: MAXIMUM OF ${wordsPerPart} words.
           - DO NOT EXCEED, BUT TRY TO REACH THIS TARGET.
+
+          === CRITICAL OUTPUT FORMAT ===
+          You may plan and think internally, but when delivering the script text,
+          ALWAYS start with the tag ${SCRIPT_START_MARKER} and then write the flowing text.
+          Example:
+          ${SCRIPT_START_MARKER}
+          The sun was rising over the city when Maria decided that today would be the day...
         `;
 
         // Cria sessão de chat única para todo o roteiro
@@ -616,7 +644,9 @@ export const useParallelScriptGenerator = (agents: Agent[]) => {
               });
             }
 
-            const cleanedPart = sanitizeScript(rawPart).trim();
+            // ✅ CORREÇÃO: Extrai conteúdo após o marcador [INICIO_ROTEIRO] para separar thinking do output
+            const extractedPart = extractAfterMarker(rawPart);
+            const cleanedPart = sanitizeScript(extractedPart).trim();
             if (!cleanedPart) {
               addLog(jobId, `⚠️ Parte ${partNumber}/${totalParts} veio vazia. Pulando...`);
               continue;
