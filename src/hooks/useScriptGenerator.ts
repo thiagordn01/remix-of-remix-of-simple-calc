@@ -38,7 +38,7 @@ function parseAIResponse(content: string): CoherentScriptResponse | null {
 }
 
 // Marcador de início do roteiro - usado para separar "thinking" do conteúdo real
-const SCRIPT_START_MARKER = '[INICIO_ROTEIRO]';
+const SCRIPT_START_MARKER = "[INICIO_ROTEIRO]";
 
 /**
  * Extrai apenas o conteúdo do roteiro após o marcador de início.
@@ -177,14 +177,14 @@ export const useScriptGenerator = () => {
           geminiChatService.createChat(sessionId, selectedApiKey, {
             systemInstruction: scriptSystemInstruction,
             maxOutputTokens: 8192,
-            temperature: 0.9
+            temperature: 0.9,
           });
         } else {
           // Puter/DeepSeek: também usa chat com histórico
           puterChatService.createChat(sessionId, {
             systemInstruction: scriptSystemInstruction,
             maxOutputTokens: 8192,
-            model: puterDeepseekService.getModel()
+            model: puterDeepseekService.getModel(),
           });
         }
 
@@ -212,7 +212,8 @@ export const useScriptGenerator = () => {
 
             // Parte 1: inclui premissa e título (a IA vai lembrar nas próximas)
             if (partNumber === 1) {
-              partPrompt = `
+              partPrompt =
+                `
               CONTEXTO (PREMISSA APROVADA):
               ${premise}
 
@@ -227,13 +228,13 @@ export const useScriptGenerator = () => {
               rawPart = await geminiChatService.sendMessage(sessionId, partPrompt, {
                 temperature: 0.9,
                 maxOutputTokens: 8192,
-                onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`),
               });
             } else {
               // Puter/DeepSeek: também usa chat com histórico agora!
               rawPart = await puterChatService.sendMessage(sessionId, partPrompt, {
                 maxOutputTokens: 8192,
-                onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`)
+                onProgress: (text) => console.log(`📝 Parte ${partNumber}: ${text.slice(0, 100)}...`),
               });
             }
 
@@ -285,6 +286,8 @@ export const useScriptGenerator = () => {
         const finalWPM = getLanguageWPM(detectedLanguage);
         const estimatedDuration = totalWords / finalWPM;
 
+        // ... (código anterior igual)
+
         const finalResult: ScriptGenerationResult = {
           premise,
           script: finalChunks.map((c) => c.content),
@@ -294,11 +297,14 @@ export const useScriptGenerator = () => {
           agentUsed: agent?.name,
         };
 
+        // ✅ CORREÇÃO AQUI: Definindo a variável que faltava
+        const numberOfChunks = finalChunks.length;
+
         setResult(finalResult);
         setProgress({
           stage: "script",
-          currentChunk: numberOfChunks,
-          totalChunks: numberOfChunks,
+          currentChunk: numberOfChunks, // Agora a variável existe
+          totalChunks: numberOfChunks, // Agora a variável existe
           completedWords: totalWords,
           targetWords: totalWords,
           isComplete: true,
