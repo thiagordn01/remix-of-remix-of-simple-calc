@@ -259,56 +259,56 @@ export class GeminiChatService {
 
     try {
 
-    const requestBody: any = {
-      contents: messages,
-      generationConfig: {
-        temperature,
-        maxOutputTokens,
-      },
-    };
-
-    if (systemInstruction) {
-      requestBody.systemInstruction = {
-        parts: [{ text: systemInstruction }],
+      const requestBody: any = {
+        contents: messages,
+        generationConfig: {
+          temperature,
+          maxOutputTokens: Math.min(maxOutputTokens, 8192), // 🔒 Trava de segurança para evitar 503
+        },
       };
-    }
 
-    // Configuração para modelos Thinking (Gemini 3)
-    if (apiKey.model.includes("gemini-3")) {
-      requestBody.generationConfig.thinkingConfig = {
-        thinkingLevel: "HIGH",
-      };
-    }
+      if (systemInstruction) {
+        requestBody.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      },
-    );
+      // Configuração para modelos Thinking (Gemini 3)
+      if (apiKey.model.includes("gemini-3")) {
+        requestBody.generationConfig.thinkingConfig = {
+          thinkingLevel: "HIGH",
+        };
+      }
 
-    clearTimeout(timeoutId);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        },
+      );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const msg = errorData.error?.message || response.statusText;
-      throw new Error(`Gemini API Error: ${response.status} - ${msg}`);
-    }
+      clearTimeout(timeoutId);
 
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const msg = errorData.error?.message || response.statusText;
+        throw new Error(`Gemini API Error: ${response.status} - ${msg}`);
+      }
 
-    if (!text) {
-      throw new Error("Resposta vazia da API Gemini (sem conteúdo gerado)");
-    }
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    return text;
+      if (!text) {
+        throw new Error("Resposta vazia da API Gemini (sem conteúdo gerado)");
+      }
+
+      return text;
     } catch (error: any) {
       clearTimeout(timeoutId);
-      
+
       if (error.name === "AbortError") {
         throw new Error(`Timeout na API ${apiKey.name} após ${timeoutMs}ms (abortado)`);
       }
