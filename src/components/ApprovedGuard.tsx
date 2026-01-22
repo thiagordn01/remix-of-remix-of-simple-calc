@@ -2,6 +2,8 @@ import { ReactNode, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
+import MaintenancePage from "@/pages/MaintenancePage";
 
 export default function ApprovedGuard({ children }: { children: ReactNode }) {
   const { session, profile, loading, isMaster } = useAuth();
@@ -69,6 +71,23 @@ export default function ApprovedGuard({ children }: { children: ReactNode }) {
         </div>
       );
     }
+  }
+
+  // ✅ CHECK MAINTENANCE MODE
+  // Must go before any other check to block unapproved users too, 
+  // BUT Master should bypass it.
+  const { maintenanceMode, loading: settingsLoading } = useSystemSettings();
+
+  if (settingsLoading) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <p className="text-muted-foreground">Carregando configurações...</p>
+      </div>
+    );
+  }
+
+  if (maintenanceMode.enabled && !isMaster) {
+    return <MaintenancePage message={maintenanceMode.message} />;
   }
 
   return <>{children}</>;

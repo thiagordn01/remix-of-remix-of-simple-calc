@@ -9,6 +9,7 @@ import { UsersManagement } from "@/components/admin/UsersManagement";
 import { InvitesManagement } from "@/components/admin/InvitesManagement";
 import { AdminRolesManagement } from "@/components/admin/AdminRolesManagement";
 import KiwifyPurchases from "@/components/admin/KiwifyPurchases";
+import { SystemSettingsTab } from "@/components/admin/SystemSettingsTab";
 
 interface ProfileRow {
   id: string;
@@ -163,6 +164,7 @@ export default function AdminPage() {
             <TabsTrigger value="admins">Administradores</TabsTrigger>
             <TabsTrigger value="kiwify">Kiwify</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="settings">Configurações</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-4">
@@ -183,6 +185,10 @@ export default function AdminPage() {
 
           <TabsContent value="analytics" className="space-y-4">
             <AdminAnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-4">
+            <SystemSettingsTab />
           </TabsContent>
         </Tabs>
       </div>
