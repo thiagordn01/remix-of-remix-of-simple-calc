@@ -15,27 +15,29 @@ import TrackingProvider from "./components/TrackingProvider";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <TrackingProvider>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/test-scripts" element={<TestScripts />} />
-            <Route path="/test-complete" element={<TestComplete />} />
-            <Route path="/admin" element={<ApprovedGuard><Admin /></ApprovedGuard>} />
-            <Route path="/settings" element={<ApprovedGuard><Settings /></ApprovedGuard>} />
-            <Route path="/" element={<ApprovedGuard><Index /></ApprovedGuard>} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TrackingProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  console.log('App version: Maintenance Mode Update');
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <TrackingProvider>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/test-scripts" element={<TestScripts />} />
+              <Route path="/test-complete" element={<TestComplete />} />
+              <Route path="/admin" element={<ApprovedGuard><Admin /></ApprovedGuard>} />
+              <Route path="/settings" element={<ApprovedGuard><Settings /></ApprovedGuard>} />
+              <Route path="/" element={<ApprovedGuard><Index /></ApprovedGuard>} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TrackingProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
 
-export default App;
+  export default App;
