@@ -54,7 +54,7 @@ export class EnhancedGeminiService {
   private getModelLimits(model: string): { rpm: number; rpd: number; tpm: number } {
     // Dados oficiais do Google AI Studio - Nível GRATUITO (corrigidos)
     const limits: Record<string, { rpm: number; rpd: number; tpm: number }> = {
-      "gemini-3-flash-preview": { rpm: 15, rpd: 500, tpm: 250000 }, // Atualizado para 250k TPM conforme feedback
+      "gemini-3-flash-preview": { rpm: 5, rpd: 20, tpm: 250000 }, // Atualizado conforme solicitação (antes: 15 RPM, 500 RPD)
       "gemini-2.5-pro": { rpm: 2, rpd: 50, tpm: 125000 }, // ✅ CORRIGIDO: 2 RPM, 50 RPD (plano gratuito real)
       "gemini-2.5-flash": { rpm: 10, rpd: 250, tpm: 250000 },
       "gemini-2.5-flash-lite": { rpm: 15, rpd: 1000, tpm: 250000 },
