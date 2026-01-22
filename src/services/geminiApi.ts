@@ -254,7 +254,18 @@ export class GeminiApiService {
   // Simplified validation method - only checks if the API key works with a simple request
   static async validateApiKeyLight(apiKey: GeminiApiKey): Promise<string> {
     const modelName = apiKey.model;
-    let url = `${GEMINI_API_BASE_URL}/${modelName}:generateContent?key=${apiKey.key}`;
+
+    // Default to v1beta for newer models (1.5, 2.0, 3.0) to avoid 404s on v1
+    const useBeta = modelName.includes('gemini-1.5') ||
+      modelName.includes('gemini-2') ||
+      modelName.includes('gemini-3') ||
+      modelName.includes('thinking'); // Thinking usually requires beta
+
+    const baseUrl = useBeta
+      ? 'https://generativelanguage.googleapis.com/v1beta/models'
+      : GEMINI_API_BASE_URL;
+
+    let url = `${baseUrl}/${modelName}:generateContent?key=${apiKey.key}`;
 
     const requestBody = {
       contents: [{
@@ -278,7 +289,7 @@ export class GeminiApiService {
     };
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout (optimized)
 
     try {
       const response = await fetch(url, {

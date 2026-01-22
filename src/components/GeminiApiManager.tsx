@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -61,10 +61,10 @@ export const GeminiApiManager = () => {
 
     try {
       addApiKey(formData);
-      
+
       setIsDialogOpen(false);
       resetForm();
-      
+
       toast({
         title: "API Key adicionada!",
         description: `A API key "${formData.name}" foi adicionada com sucesso.`
@@ -80,10 +80,10 @@ export const GeminiApiManager = () => {
 
   const handleValidateApiKey = async (apiKey: GeminiApiKey) => {
     setValidatingKeys(prev => new Set([...prev, apiKey.id]));
-    
+
     try {
       const status = await GeminiApiService.validateApiKey(apiKey);
-      
+
       updateApiKey(apiKey.id, {
         status: status.status,
         statusMessage: status.message,
@@ -114,7 +114,7 @@ export const GeminiApiManager = () => {
         statusMessage: 'Erro na validação',
         lastValidated: new Date()
       });
-      
+
       toast({
         title: "Erro na validação",
         description: "Não foi possível validar a API key.",
@@ -376,7 +376,7 @@ export const GeminiApiManager = () => {
     // Filtrar apenas chaves que não estão suspensas/inválidas para evitar desperdício, 
     // mas o usuário pode querer testar tudo, então vamos testar todas as ativas.
     const keysToTest = apiKeys.filter(k => k.isActive);
-    
+
     if (keysToTest.length === 0) {
       toast({
         title: "Nenhuma API ativa",
@@ -395,11 +395,11 @@ export const GeminiApiManager = () => {
     for (const apiKey of keysToTest) {
       // Pular se já estiver validando
       if (validatingKeys.has(apiKey.id)) continue;
-      
+
       await handleValidateApiKey(apiKey);
-      
-      // Pequeno delay para não floodar
-      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Pequeno delay para não floodar, mas rápido (100ms)
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     toast({
@@ -408,8 +408,8 @@ export const GeminiApiManager = () => {
     });
   };
 
-  const activeApiKeys = apiKeys.filter(key => 
-    key.isActive && 
+  const activeApiKeys = apiKeys.filter(key =>
+    key.isActive &&
     key.status !== 'suspended' &&
     key.status !== 'invalid'
   );
@@ -435,7 +435,7 @@ export const GeminiApiManager = () => {
           />
 
           {/* Botão Testar Todas */}
-           <Button
+          <Button
             onClick={handleTestAllKeys}
             variant="outline"
             disabled={validatingKeys.size > 0}
@@ -484,62 +484,62 @@ export const GeminiApiManager = () => {
               </Button>
             </DialogTrigger>
             <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adicionar Nova API Key</DialogTitle>
-              <DialogDescription>
-                Adicione uma nova chave de API do Google Gemini para gerar roteiros. Obtenha sua chave em https://aistudio.google.com/app/apikey
-              </DialogDescription>
-            </DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Adicionar Nova API Key</DialogTitle>
+                <DialogDescription>
+                  Adicione uma nova chave de API do Google Gemini para gerar roteiros. Obtenha sua chave em https://aistudio.google.com/app/apikey
+                </DialogDescription>
+              </DialogHeader>
 
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nome da API Key *</Label>
-                <Input
-                  id="name"
-                  placeholder="Ex: Minha API Principal"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Nome da API Key *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Ex: Minha API Principal"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="key">API Key *</Label>
-                <Input
-                  id="key"
-                  type="password"
-                  placeholder="AIza..."
-                  value={formData.key}
-                  onChange={(e) => setFormData(prev => ({ ...prev, key: e.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Obtenha sua API key em: https://aistudio.google.com/app/apikey
-                </p>
-              </div>
+                <div>
+                  <Label htmlFor="key">API Key *</Label>
+                  <Input
+                    id="key"
+                    type="password"
+                    placeholder="AIza..."
+                    value={formData.key}
+                    onChange={(e) => setFormData(prev => ({ ...prev, key: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Obtenha sua API key em: https://aistudio.google.com/app/apikey
+                  </p>
+                </div>
 
-              <div>
-                <Label htmlFor="model">Modelo</Label>
-                <Select value={formData.model} onValueChange={(value) => setFormData(prev => ({ ...prev, model: value as GeminiApiKey['model'] }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gemini-3-flash-preview">Gemini 3 Flash Preview (Recomendado)</SelectItem>
-                    <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                    <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div>
+                  <Label htmlFor="model">Modelo</Label>
+                  <Select value={formData.model} onValueChange={(value) => setFormData(prev => ({ ...prev, model: value as GeminiApiKey['model'] }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gemini-3-flash-preview">Gemini 3 Flash Preview (Recomendado)</SelectItem>
+                      <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                      <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleAddApiKey}>
-                  Adicionar
-                </Button>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleAddApiKey}>
+                    Adicionar
+                  </Button>
+                </div>
               </div>
-            </div>
-          </DialogContent>
+            </DialogContent>
           </Dialog>
         </div>
       </div>
@@ -552,7 +552,7 @@ export const GeminiApiManager = () => {
             Nesta seção você gerencia o cadastro das chaves, ativa/desativa e roda testes rápidos. Os números abaixo são históricos de uso, diferentes dos limites RPM/RPD do monitor.
           </p>
         </div>
- 
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="shadow-golden hover:shadow-golden-lg transition-all duration-300 border-golden-200 dark:border-golden-800">
             <CardContent className="p-6 bg-gradient-to-br from-golden-50 to-amber-50/50 dark:from-golden-950/30 dark:to-amber-950/20">
@@ -565,7 +565,7 @@ export const GeminiApiManager = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
             <CardContent className="p-6 bg-gradient-to-br from-success/5 to-transparent">
               <div className="flex items-center justify-between">
@@ -577,7 +577,7 @@ export const GeminiApiManager = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-large)] transition-all duration-300">
             <CardContent className="p-6 bg-gradient-to-br from-info/5 to-transparent">
               <div className="flex items-center justify-between">
