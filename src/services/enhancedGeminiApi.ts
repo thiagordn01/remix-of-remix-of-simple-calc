@@ -1639,38 +1639,21 @@ export class EnhancedGeminiService {
           }
         }
 
-        // 2. Detectar meta-conteúdo (explicações sobre o que a IA está fazendo)
+        // 2. Detectar meta-conteúdo: AO INVÉS DE REJEITAR, aceitar para ser limpo depois se tiver conteúdo útil
         const metaPatterns = [
           /\(o roteiro foi/i,
           /\(conforme solicitado/i,
           /\(de acordo com/i,
           /\(seguindo as instruções/i,
-          /\(o bloco anterior/i,
-          /\(este é o bloco/i,
-          /\(concluído no bloco/i,
-          /\(a narrativa foi/i,
-          /\(como você pediu/i,
-          /\(aqui está/i,
           /^claro,?\s+vou/i,
-          /^de acuerdo,?\s+aquí/i,
           /^ok,?\s+vou/i,
-          /roteiro está completo conforme/i,
-          /violaria a estrutura/i,
-          /instrução de não repetir/i,
         ];
 
         for (const pattern of metaPatterns) {
           if (pattern.test(texto)) {
-            console.warn(`⚠️ Meta-conteúdo detectado: ${pattern}`);
-            return false;
+            console.warn(`⚠️ Meta-conteúdo detectado: ${pattern} - Aceitando para limpeza posterior`);
+            // NÃO retornar false aqui, apenas logar. A limpeza acontece em removeMetaContent
           }
-        }
-
-        // 3. Detectar se é APENAS explicação entre parênteses
-        const parenthesesContent = texto.match(/^\(.*\)$/s);
-        if (parenthesesContent) {
-          console.warn(`⚠️ Resposta é apenas texto entre parênteses (meta-explicação)`);
-          return false;
         }
 
         return true;
