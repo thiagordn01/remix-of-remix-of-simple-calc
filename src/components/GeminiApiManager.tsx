@@ -372,6 +372,42 @@ export const GeminiApiManager = () => {
     );
   };
 
+  const handleTestAllKeys = async () => {
+    // Filtrar apenas chaves que não estão suspensas/inválidas para evitar desperdício, 
+    // mas o usuário pode querer testar tudo, então vamos testar todas as ativas.
+    const keysToTest = apiKeys.filter(k => k.isActive);
+    
+    if (keysToTest.length === 0) {
+      toast({
+        title: "Nenhuma API ativa",
+        description: "Ative pelo menos uma API para testar.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    toast({
+      title: "Iniciando teste em massa",
+      description: `Testando ${keysToTest.length} chaves sequencialmente...`,
+    });
+
+    // Processar em lotes pequenos para não travar a UI
+    for (const apiKey of keysToTest) {
+      // Pular se já estiver validando
+      if (validatingKeys.has(apiKey.id)) continue;
+      
+      await handleValidateApiKey(apiKey);
+      
+      // Pequeno delay para não floodar
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    toast({
+      title: "Teste concluído",
+      description: "Todas as APIs ativas foram testadas.",
+    });
+  };
+
   const activeApiKeys = apiKeys.filter(key => 
     key.isActive && 
     key.status !== 'suspended' &&
@@ -397,6 +433,17 @@ export const GeminiApiManager = () => {
             onChange={handleFileChange}
             className="hidden"
           />
+
+          {/* Botão Testar Todas */}
+           <Button
+            onClick={handleTestAllKeys}
+            variant="outline"
+            disabled={validatingKeys.size > 0}
+            className="flex items-center gap-2 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+          >
+            {validatingKeys.size > 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+            Testar Todas
+          </Button>
 
           {/* Botão Importar Backup */}
           <Button
