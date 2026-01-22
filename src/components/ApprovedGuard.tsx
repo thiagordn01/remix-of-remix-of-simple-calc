@@ -10,6 +10,9 @@ export default function ApprovedGuard({ children }: { children: ReactNode }) {
   const location = useLocation();
   // ✅ CHECK MAINTENANCE MODE
   // Must be called at top level (Rules of Hooks)
+  // ✅ CHECK MAINTENANCE MODE
+  // Must be called at top level (Rules of Hooks)
+  // This hook helps us determine if we need to block access due to maintenance
   const { maintenanceMode, loading: settingsLoading } = useSystemSettings();
 
   useEffect(() => {
