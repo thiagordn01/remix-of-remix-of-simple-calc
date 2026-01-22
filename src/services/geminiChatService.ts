@@ -77,7 +77,7 @@ export class GeminiChatService {
         session,
         options.temperature ?? 0.7,
         options.maxOutputTokens ?? 8192,
-        options.timeoutMs ?? 120000, // Default 120s
+        options.timeoutMs ?? 300000, // Default 300s (5 min) para evitar timeout em gerações longas
         options.onProgress,
       );
 
