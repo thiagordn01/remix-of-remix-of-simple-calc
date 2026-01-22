@@ -8,6 +8,9 @@ import MaintenancePage from "@/pages/MaintenancePage";
 export default function ApprovedGuard({ children }: { children: ReactNode }) {
   const { session, profile, loading, isMaster } = useAuth();
   const location = useLocation();
+  // ✅ CHECK MAINTENANCE MODE
+  // Must be called at top level (Rules of Hooks)
+  const { maintenanceMode, loading: settingsLoading } = useSystemSettings();
 
   useEffect(() => {
     document.title = "Acesso – Requer login";
@@ -15,19 +18,25 @@ export default function ApprovedGuard({ children }: { children: ReactNode }) {
     if (meta) meta.setAttribute("content", "Faça login para acessar o gerador de áudio.");
   }, []);
 
-  if (loading) {
+  if (loading || settingsLoading) {
     return (
       <div className="min-h-screen grid place-items-center">
-        <p className="text-muted-foreground">Carregando…</p>
+        <p className="text-muted-foreground">Carregando...</p>
       </div>
     );
   }
 
+  // 1. Maintenance Mode Check (Highest Priority for non-masters)
+  if (maintenanceMode.enabled && !isMaster) {
+    return <MaintenancePage message={maintenanceMode.message} />;
+  }
+
+  // 2. Auth Check
   if (!session) {
     return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
-  // Verificar se o usuário não está aprovado
+  // 3. Approval Check
   if (profile && !profile.is_approved && !isMaster) {
     return (
       <div className="min-h-screen grid place-items-center p-6">
@@ -48,7 +57,7 @@ export default function ApprovedGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // Verificar se o acesso do usuário expirou
+  // 4. Expiration Check
   if (profile && profile.access_expires_at && !isMaster) {
     const expirationDate = new Date(profile.access_expires_at);
     const now = new Date();
@@ -71,23 +80,6 @@ export default function ApprovedGuard({ children }: { children: ReactNode }) {
         </div>
       );
     }
-  }
-
-  // ✅ CHECK MAINTENANCE MODE
-  // Must go before any other check to block unapproved users too, 
-  // BUT Master should bypass it.
-  const { maintenanceMode, loading: settingsLoading } = useSystemSettings();
-
-  if (settingsLoading) {
-    return (
-      <div className="min-h-screen grid place-items-center">
-        <p className="text-muted-foreground">Carregando configurações...</p>
-      </div>
-    );
-  }
-
-  if (maintenanceMode.enabled && !isMaster) {
-    return <MaintenancePage message={maintenanceMode.message} />;
   }
 
   return <>{children}</>;
