@@ -314,11 +314,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    console.log("=== Webhook Kiwify Recebido ===");
-    console.log("DEBUG - SYSTEM_EMAIL_FROM:", SYSTEM_EMAIL_FROM);
-    console.log("DEBUG - RESEND_API_KEY configurado:", !!RESEND_API_KEY);
-
-    // 1. Validar método HTTP
+    // 1. Validar método HTTP (sem log para reduzir ruído)
     if (req.method !== "POST") {
       return new Response(
         JSON.stringify({ error: "Method not allowed" }),
@@ -326,29 +322,24 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Validar token de segurança da Kiwify
+    // 2. Validar token de segurança da Kiwify (sem log detalhado)
     if (KIWIFY_WEBHOOK_TOKEN) {
       const url = new URL(req.url);
       const tokenFromUrl = url.searchParams.get("token");
 
       if (tokenFromUrl !== KIWIFY_WEBHOOK_TOKEN) {
-        console.error("Token inválido ou ausente. Esperado:", KIWIFY_WEBHOOK_TOKEN, "Recebido:", tokenFromUrl);
+        console.error(`[UNAUTHORIZED] Token inválido para webhook`);
         return new Response(
           JSON.stringify({ error: "Unauthorized - Invalid token" }),
           { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
-
-      console.log("✅ Token validado com sucesso");
-    } else {
-      console.warn("⚠️ KIWIFY_WEBHOOK_TOKEN não configurado - webhook sem validação de token!");
     }
 
-    // 3. Parsear payload
+    // 3. Parsear payload (sem log ainda - verificamos idempotência primeiro)
     const payload: KiwifyWebhook = await req.json();
-    console.log("Payload recebido:", JSON.stringify(payload, null, 2));
 
-    // 4. Validar campos obrigatórios
+    // 4. Validar campos obrigatórios (sem log)
     if (!payload.order_id) {
       return new Response(
         JSON.stringify({ error: "Missing order_id" }),
@@ -363,12 +354,68 @@ serve(async (req: Request) => {
       );
     }
 
-    // 5. Processar baseado no status do pedido
     const orderStatus = payload.order_status;
-    console.log(`Processando pedido ${payload.order_id} com status: ${orderStatus}`);
 
     // Criar cliente Supabase com service role (bypass RLS)
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // 5. VERIFICAÇÃO DE IDEMPOTÊNCIA ANTECIPADA
+    // Para status "paid", verificar se já processamos ANTES de fazer qualquer log
+    // Isso evita logs duplicados quando a Kiwify reenvia o webhook
+    if (orderStatus === "paid") {
+      const { data: existingPurchase } = await admin
+        .from("kiwify_purchases")
+        .select("id, user_id")
+        .eq("order_id", payload.order_id)
+        .maybeSingle();
+
+      if (existingPurchase) {
+        // Webhook duplicado - log mínimo e retorna imediatamente
+        console.log(`[DUPLICATE] Pedido ${payload.order_id} já processado anteriormente - ignorando webhook duplicado`);
+
+        // Ainda atualiza a data de expiração do acesso (caso a Kiwify tenha enviado dados atualizados)
+        const customerEmail = payload.Customer?.email?.toLowerCase().trim();
+        const accessUntil = payload.Subscription?.customer_access?.access_until;
+        const nextPayment = payload.Subscription?.next_payment;
+
+        if (existingPurchase.user_id && (accessUntil || nextPayment)) {
+          const expiresAt = accessUntil
+            ? new Date(accessUntil).toISOString()
+            : nextPayment
+              ? new Date(nextPayment).toISOString()
+              : null;
+
+          if (expiresAt) {
+            await admin
+              .from("profiles")
+              .update({
+                access_expires_at: expiresAt,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", existingPurchase.user_id);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            message: "Webhook already processed - duplicate ignored",
+            order_id: payload.order_id,
+            is_duplicate: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
+    // 6. A PARTIR DAQUI: Webhook novo - agora sim fazemos os logs detalhados
+    console.log("=== Webhook Kiwify Recebido (NOVO) ===");
+    console.log(`Pedido: ${payload.order_id} | Status: ${orderStatus} | Email: ${payload.Customer?.email}`);
+
+    // Log do payload completo apenas em desenvolvimento ou para debug
+    if (Deno.env.get("DEBUG_WEBHOOKS") === "true") {
+      console.log("Payload completo:", JSON.stringify(payload, null, 2));
+    }
 
     // Status que exigem revogação de acesso
     const REVOKE_STATUSES = ["cancelled", "refunded", "chargeback", "canceled"];
@@ -380,7 +427,7 @@ serve(async (req: Request) => {
 
     // Status que concedem acesso
     if (orderStatus === "paid") {
-      console.log(`✅ Status concede acesso: ${orderStatus}`);
+      console.log(`✅ Processando nova compra...`);
       return await handlePaidOrder(payload, admin);
     }
 
@@ -407,23 +454,11 @@ serve(async (req: Request) => {
 
 /**
  * Processa pedido pago - concede acesso
+ * NOTA: A verificação de idempotência já foi feita no serve() principal
+ * Se chegou aqui, é um pedido NOVO que ainda não foi processado
  */
 async function handlePaidOrder(payload: KiwifyWebhook, admin: any): Promise<Response> {
   try {
-    // 1. Verificar se já processamos este pedido (idempotência)
-    const { data: existingPurchase } = await admin
-      .from("kiwify_purchases")
-      .select("id, user_id")
-      .eq("order_id", payload.order_id)
-      .maybeSingle();
-
-    // Se já processamos este pedido, ainda assim atualizamos o acesso do usuário
-    // Isso permite correções via reenvio de webhook
-    const isReprocessing = !!existingPurchase;
-    if (isReprocessing) {
-      console.log(`⚠️ Pedido ${payload.order_id} já foi processado anteriormente - reprocessando para atualizar acesso`);
-    }
-
     const customerEmail = payload.Customer?.email?.toLowerCase().trim() || '';
     const customerName = payload.Customer?.full_name || "Usuário";
     const customerPhone = payload.Customer?.mobile;
@@ -566,48 +601,44 @@ async function handlePaidOrder(payload: KiwifyWebhook, admin: any): Promise<Resp
       console.log("Profile atualizado com sucesso");
     }
 
-    // 12. Registrar compra na tabela de auditoria (apenas se não for reprocessamento)
-    if (!isReprocessing) {
-      const { error: purchaseError } = await admin
-        .from("kiwify_purchases")
-        .insert({
-          user_id: userId,
-          order_id: payload.order_id,
-          order_ref: payload.order_ref,
-          order_status: payload.order_status,
-          payment_method: payload.payment_method,
-          payment_merchant_id: payload.payment_merchant_id,
-          installments: payload.installments,
-          amount: payload.order_amount,
-          product_id: payload.Product?.product_id,
-          product_name: payload.Product?.product_name,
-          customer_name: customerName,
-          customer_email: customerEmail,
-          customer_phone: customerPhone,
-          subscription_id: payload.Subscription?.subscription_id,
-          subscription_start_date: payload.Subscription?.start_date,
-          subscription_next_payment: payload.Subscription?.next_payment,
-          webhook_payload: payload,
-          purchased_at: new Date().toISOString(),
-        });
+    // 12. Registrar compra na tabela de auditoria
+    const { error: purchaseError } = await admin
+      .from("kiwify_purchases")
+      .insert({
+        user_id: userId,
+        order_id: payload.order_id,
+        order_ref: payload.order_ref,
+        order_status: payload.order_status,
+        payment_method: payload.payment_method,
+        payment_merchant_id: payload.payment_merchant_id,
+        installments: payload.installments,
+        amount: payload.order_amount,
+        product_id: payload.Product?.product_id,
+        product_name: payload.Product?.product_name,
+        customer_name: customerName,
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
+        subscription_id: payload.Subscription?.subscription_id,
+        subscription_start_date: payload.Subscription?.start_date,
+        subscription_next_payment: payload.Subscription?.next_payment,
+        webhook_payload: payload,
+        purchased_at: new Date().toISOString(),
+      });
 
-      if (purchaseError) {
-        console.error("Erro ao registrar compra:", purchaseError);
-        // Não é fatal - continuar
-      } else {
-        console.log("Compra registrada com sucesso");
-      }
-
-      // 13. Enviar email com credenciais para o comprador (apenas no primeiro processamento)
-      if (isNewUser && tempPassword) {
-        console.log(`Enviando email com credenciais para ${customerEmail}...`);
-        await sendCredentialsEmail(customerEmail, customerName, tempPassword, true);
-      } else if (!isNewUser) {
-        console.log(`Enviando email de renovação para ${customerEmail}...`);
-        await sendCredentialsEmail(customerEmail, customerName, "", false);
-      }
+    if (purchaseError) {
+      console.error("Erro ao registrar compra:", purchaseError);
+      // Não é fatal - continuar
     } else {
-      console.log(`⚠️ Reprocessamento: pulando registro de compra e envio de email (já feito anteriormente)`);
+      console.log("Compra registrada com sucesso");
+    }
+
+    // 13. Enviar email com credenciais para o comprador
+    if (isNewUser && tempPassword) {
+      console.log(`Enviando email com credenciais para ${customerEmail}...`);
+      await sendCredentialsEmail(customerEmail, customerName, tempPassword, true);
+    } else if (!isNewUser) {
+      console.log(`Enviando email de renovação para ${customerEmail}...`);
+      await sendCredentialsEmail(customerEmail, customerName, "", false);
     }
 
     // 14. Enviar dados para API do parceiro (Talkify/Charles Network)
@@ -618,14 +649,13 @@ async function handlePaidOrder(payload: KiwifyWebhook, admin: any): Promise<Resp
     await sendToPartnerAPI(customerEmail, customerName, "subscription", durationDays);
 
     // 15. Retornar sucesso
-    console.log(`✅ Webhook ${isReprocessing ? 'reprocessado' : 'processado'} com sucesso para pedido ${payload.order_id}`);
+    console.log(`✅ Webhook processado com sucesso para pedido ${payload.order_id}`);
     return new Response(
       JSON.stringify({
         ok: true,
-        message: isReprocessing ? "Webhook reprocessed - access updated" : "Webhook processed successfully",
+        message: "Webhook processed successfully",
         user_id: userId,
         is_new_user: isNewUser,
-        is_reprocessing: isReprocessing,
         access_expires_at: expiresAt,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
