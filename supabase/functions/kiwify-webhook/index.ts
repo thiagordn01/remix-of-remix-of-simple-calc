@@ -359,10 +359,17 @@ serve(async (req: Request) => {
     // Criar cliente Supabase com service role (bypass RLS)
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Status que concedem acesso (Kiwify pode enviar múltiplos webhooks para o mesmo pedido)
+    // Ex: "Compra aprovada" (paid) + "Assinatura renovada" (paid ou subscription_renewed)
+    const ACCESS_GRANTING_STATUSES = ["paid", "subscription_renewed", "renewed", "active"];
+
+    // Status que exigem revogação de acesso
+    const REVOKE_STATUSES = ["cancelled", "refunded", "chargeback", "canceled"];
+
     // 5. VERIFICAÇÃO DE IDEMPOTÊNCIA ANTECIPADA
-    // Para status "paid", verificar se já processamos ANTES de fazer qualquer log
-    // Isso evita logs duplicados quando a Kiwify reenvia o webhook
-    if (orderStatus === "paid") {
+    // Verificar se já processamos ANTES de fazer qualquer log
+    // A Kiwify envia 2 webhooks por pagamento: "Compra aprovada" + "Assinatura renovada"
+    if (ACCESS_GRANTING_STATUSES.includes(orderStatus)) {
       const { data: existingPurchase } = await admin
         .from("kiwify_purchases")
         .select("id, user_id")
@@ -370,11 +377,10 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       if (existingPurchase) {
-        // Webhook duplicado - log mínimo e retorna imediatamente
-        console.log(`[DUPLICATE] Pedido ${payload.order_id} já processado anteriormente - ignorando webhook duplicado`);
+        // Webhook duplicado (provavelmente o segundo evento da Kiwify)
+        console.log(`[DUPLICATE] Pedido ${payload.order_id} (status: ${orderStatus}) - já processado, ignorando`);
 
         // Ainda atualiza a data de expiração do acesso (caso a Kiwify tenha enviado dados atualizados)
-        const customerEmail = payload.Customer?.email?.toLowerCase().trim();
         const accessUntil = payload.Subscription?.customer_access?.access_until;
         const nextPayment = payload.Subscription?.next_payment;
 
@@ -401,6 +407,7 @@ serve(async (req: Request) => {
             ok: true,
             message: "Webhook already processed - duplicate ignored",
             order_id: payload.order_id,
+            original_status: orderStatus,
             is_duplicate: true,
           }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -417,17 +424,15 @@ serve(async (req: Request) => {
       console.log("Payload completo:", JSON.stringify(payload, null, 2));
     }
 
-    // Status que exigem revogação de acesso
-    const REVOKE_STATUSES = ["cancelled", "refunded", "chargeback", "canceled"];
-
+    // Verificar status de revogação
     if (REVOKE_STATUSES.includes(orderStatus)) {
       console.log(`⚠️ Status requer revogação de acesso: ${orderStatus}`);
       return await handleAccessRevocation(payload, admin);
     }
 
-    // Status que concedem acesso
-    if (orderStatus === "paid") {
-      console.log(`✅ Processando nova compra...`);
+    // Status que concedem acesso (paid, subscription_renewed, etc)
+    if (ACCESS_GRANTING_STATUSES.includes(orderStatus)) {
+      console.log(`✅ Processando nova compra/renovação (status: ${orderStatus})...`);
       return await handlePaidOrder(payload, admin);
     }
 
