@@ -1,7 +1,7 @@
 import { GeminiApiKey } from "@/types/scripts";
 import { getLanguageByCode } from "../data/languages";
 
-import { ApiError } from '@/types/api';
+import { ApiError } from "@/types/api";
 
 // Type guard para ApiError
 function isApiError(err: any): err is ApiError {
@@ -453,7 +453,7 @@ export class EnhancedGeminiService {
       message,
       status,
       retryable,
-      quotaInfo
+      quotaInfo,
     });
 
     if (status === 429) {
@@ -1552,7 +1552,7 @@ export class EnhancedGeminiService {
       availableApis,
       { targetWords: targetWords && targetWords > 0 ? targetWords : undefined },
       {
-        temperature: 0.6, // ✅ CORREÇÃO: Reduzido de 0.8 para 0.6 (mais controle, menos "viagens")
+        temperature: 0.85, // ✅ CORREÇÃO: Reduzido de 0.8 para 0.6 (mais controle, menos "viagens")
         timeoutMs: 180000, // ✅ NOVO: 3 minutos (aumentado para suportar 1000 palavras)
         maxTokens: 40000,
         onProgress,
