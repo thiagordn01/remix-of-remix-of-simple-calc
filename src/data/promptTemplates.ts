@@ -15,30 +15,34 @@ PROMPT DO USUÁRIO:
 """
 
 CONFIGURAÇÕES:
-- IDIOMA DE SAÍDA: ${targetLanguage}
-- DURAÇÃO ALVO: [duracao] minutos
+- IDIOMA: ${targetLanguage}
+- DURAÇÃO TOTAL: [duracao] minutos
 
-⚠️ DIRETRIZ SUPREMA:
-1. O PROMPT DO USUÁRIO É A LEI. Siga apenas o que está escrito nele.
+⚠️ INSTRUÇÃO CRÍTICA DE COERÊNCIA:
+1. Defina nomes fixos para os personagens. Não mude depois.
+2. Defina a idade da criança e mantenha a consistência (se passou 5 anos do acidente, some a idade corretamente).
+3. Defina a linha do tempo claramente.
 
-FORMATO DE SAÍDA OBRIGATÓRIO (Apenas para organização interna do código):
+FORMATO DE SAÍDA OBRIGATÓRIO (Siga estritamente):
 
 [BIBLE]
-- TEMA: [Resumo do que foi pedido]
-- ESTILO: [Estilo solicitado]
-- OBSERVACOES: [Pontos importantes citados no prompt]
+- PROTAGONISTA: [Nome, Idade, Profissão]
+- CRIANÇA: [Nome, Idade Atual, Relação com Protagonista]
+- ANTAGONISTA: [Nome, Função]
+- ITEM CHAVE: [Ex: Medalhão, Boneca, Foto]
+- LINHA DO TEMPO: [Ex: Acidente há 5 anos -> Encontro hoje]
 [/BIBLE]
 
 [CAPITULO 1]
-(Início...)
+(Apenas o Incidente Inicial. O que acontece: ...)
 
 [CAPITULO 2]
-(Meio...)
+(Apenas o Desenvolvimento/Investigação. O que acontece: ...)
 
 [CAPITULO 3]
-(Fim...)
+(Apenas o Clímax e Conclusão. O que acontece: ...)
 
-(Adapte a quantidade de capítulos conforme a duração solicitada).
+(Adicione mais capítulos APENAS se necessário para a duração, mas mantenha a história linear).
 `;
 
 const getNeutralScript = (targetLanguage: string, culturalContext: string) => `
