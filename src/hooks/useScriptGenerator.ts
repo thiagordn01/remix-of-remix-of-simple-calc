@@ -108,7 +108,17 @@ export const useScriptGenerator = () => {
           message: "Criando premissa e bíblia da história...",
         });
 
-        const processedPremisePrompt = `${config.premisePrompt}\n\n[IMPORTANTE: Defina idades e datas explicitamente]`;
+        const processedPremisePrompt = `${config.premisePrompt}
+        
+        [CONFIGURAÇÃO DE GERAÇÃO ÚNICA]
+        Session ID: ${crypto.randomUUID()}
+        INSTRUÇÃO: Use o Session ID acima como semente de aleatoriedade.
+        Seu objetivo é garantir que esta história seja distinta de outras gerações padrão.
+        Se criar personagens, varie os nomes para que não sejam os estatisticamente mais comuns (ex: varie além dos padrões típicos).
+        Se não houver personagens, varie a abordagem narrativa.
+        O foco é UNICIDADE para esta sessão específica.
+
+        [IMPORTANTE: Defina idades e datas explicitamente]`;
 
         const premiseResult =
           provider === "deepseek"
