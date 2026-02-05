@@ -18,19 +18,15 @@ CONFIGURAÇÕES:
 - IDIOMA: ${targetLanguage}
 - DURAÇÃO TOTAL: [duracao] minutos
 
-⚠️ INSTRUÇÃO CRÍTICA DE COERÊNCIA:
-1. Defina nomes fixos para os personagens. Não mude depois.
-2. Defina a idade da criança e mantenha a consistência (se passou 5 anos do acidente, some a idade corretamente).
-3. Defina a linha do tempo claramente.
+⚠️ DIRETRIZ SUPREMA:
+1. O PROMPT DO USUÁRIO É A LEI. Siga apenas o que está escrito nele.
 
 FORMATO DE SAÍDA OBRIGATÓRIO (Siga estritamente):
 
 [BIBLE]
-- PROTAGONISTA: [Nome, Idade, Profissão]
-- CRIANÇA: [Nome, Idade Atual, Relação com Protagonista]
-- ANTAGONISTA: [Nome, Função]
-- ITEM CHAVE: [Ex: Medalhão, Boneca, Foto]
-- LINHA DO TEMPO: [Ex: Acidente há 5 anos -> Encontro hoje]
+- TEMA: [Resumo do que foi pedido]
+- ESTILO: [Estilo solicitado]
+- OBSERVACOES: [Pontos importantes citados no prompt]
 [/BIBLE]
 
 [CAPITULO 1]
